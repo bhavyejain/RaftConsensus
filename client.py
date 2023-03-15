@@ -58,8 +58,10 @@ def handle_cli(client, client_id):
                     comp = message.split()
                 elif message.startswith("FAILLINK"):
                     comp = message.split()
+                    conn_name = comp[1] # basically the other client name
                 elif message.startswith("FIXLINK"):
                     comp = message.split()
+                    conn_name = comp[1] # basically the other client name
                 elif message == "FAILPROCESS":
                     print("lala")
                 elif message == "PRINTALL":
