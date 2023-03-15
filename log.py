@@ -19,11 +19,25 @@ class LogEntry:
         self.issuer = issuer
         self.key = key
         self.keyval = keyval    # key value pair to be inserted
+    
+    def __str__(self):
+        tmp = f'Index {self.index} | Term {self.term} | Type {self.op_t} | DictID {self.dict_id}'
+        if self.op_t == LogConsts.CREATE:
+            tmp = tmp + f' | Members {self.members}'
+        elif self.op_t == LogConsts.PUT:
+            tmp = tmp + f' | Issuer {self.issuer} | KeyValue {self.keyval}'
+        else:
+            tmp = tmp + f' | Issuer {self.issuer} | Key {self.key}'
+        return tmp
 
 class Log:
-    def __init__(self):
+    def __init__(self, client_name):
         self.log = []
         self.commit_index = 0
+        self.id = client_name
+
+    def __str__(self):
+        return f'Log has {len(self.log)} entries with entries committed till index {self.commit_index}'
     
     def get_last_term_idx(self):
         if(len(self.log) == 0):
@@ -35,16 +49,12 @@ class Log:
     def write_logs_to_disk(self):
         filename = f'{config.FILES_PATH}/{self.id}_log.log'
         with open(filename, "wb") as log_file:
-            # for entry in self.log:
-            #     pickle.dump(entry, log_file, pickle.HIGHEST_PROTOCOL)
             pickle.dump(self, log_file, pickle.HIGHEST_PROTOCOL) # dump the entire log object with class variables
     
     def read_logs_from_disk(self):
         self.log.clear()
         filename = f'{config.FILES_PATH}/{self.id}_log.log'
         with open(filename, "rb") as log_file:
-            # entry = pickle.load(log_file)
-            # self.log.append(entry)
             temp = pickle.load(log_file)
             self.log = temp.log
             self.commit_index = temp.commit_index

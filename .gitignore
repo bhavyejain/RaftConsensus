@@ -131,3 +131,4 @@ dmypy.json
 # misc
 /raft_disk
 test*
+.DS_Store
