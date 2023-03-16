@@ -9,11 +9,14 @@ import pickle
 import time
 import threading
 from tqdm import tqdm
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
         self.role = RaftConsts.FOLLOWER
         self.timeout = random.randint((config.DEF_TIMEOUT*3 + 1), (config.DEF_DELAY*6)) # 3T+1 < timeout < 5T
+        print(f'Starting consensus module with timeout {self.timeout} seconds')
         self.voted_for = ""
         self.id = client_name
         self.term = 0
@@ -199,6 +202,12 @@ class ConsensusModule:
             self.handle_append_rpc(message)
         elif message.m_type == RaftConsts.RESULT:
             self.handle_append_response(message)
+    
+    def update_next_index(self):
+        _, lli = self.log.get_last_term_idx()
+        for client, _ in config.CLIENT_PORTS:
+            if not client == self.id:
+                self.next_index[client] = lli + 1
 
     def write_state_to_disk(self):
         filename = f'{config.FILES_PATH}/{self.id}_statevars.txt'
@@ -224,18 +233,20 @@ class StateMachine:
         self.last_committed = 0
     
     def advance_state_machine(self):
-        if self.log.commit_index > self.last_committed:
-            num_entries = self.log.num_entries()
-            while self.last_committed < num_entries and self.last_committed < self.log.commit_index:
-                self.last_committed = self.last_committed + 1
-                print(f'Executing entry at index {self.last_committed}')
-                entry = self.log.get_entry_at_index(self.last_committed)
-                if entry.op_t == LogConsts.CREATE:
-                    self.handle_create(entry)
-                elif entry.op_t == LogConsts.PUT:
-                    self.handle_put(entry)
-                elif entry.op_t == LogConsts.GET:
-                    self.handle_get(entry)
+        while True:
+            if self.log.commit_index > self.last_committed:
+                num_entries = self.log.num_entries()
+                while self.last_committed < num_entries and self.last_committed < self.log.commit_index:
+                    self.last_committed = self.last_committed + 1
+                    print(f'Executing entry at index {self.last_committed}')
+                    entry = self.log.get_entry_at_index(self.last_committed)
+                    if entry.op_t == LogConsts.CREATE:
+                        self.handle_create(entry)
+                    elif entry.op_t == LogConsts.PUT:
+                        self.handle_put(entry)
+                    elif entry.op_t == LogConsts.GET:
+                        self.handle_get(entry)
+            time.sleep(0.5) # check twice every second
 
     def handle_create(self, entry):
         new_id = entry.dict_id

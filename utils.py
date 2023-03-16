@@ -1,5 +1,8 @@
 from enum import Enum
 import config
+from log import LogEntry, LogConsts
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 class Colors:
     VIOLET = '\033[94m'
@@ -58,3 +61,16 @@ def get_pid(client_name):
     return int(client_name.split('_')[1])
 
 CLIENT_COUNT = len(config.CLIENT_PORTS)
+
+def prepare_create_entry(term, id, counter, members):
+    dict_id = f'{id}_{counter}'
+    entry = LogEntry(term=term, op_t=LogConsts.CREATE, dict_id=dict_id, members=members)
+    return entry
+
+def prepare_put_entry(term, dict_id, issuer, keyval):
+    entry = LogEntry(term=term, op_t=LogConsts.PUT, dict_id=dict_id, issuer=issuer, keyval=keyval)
+    return entry
+
+def prepare_get_entry(term, dict_id, issuer, key):
+    entry = LogEntry(term=term, op_t=LogConsts.PUT, dict_id=dict_id, issuer=issuer, key=key)
+    return entry
