@@ -35,9 +35,13 @@ class Log:
         self.log = []
         self.commit_index = 0
         self.id = client_name
+        self.last_committed = 0
 
     def __str__(self):
         return f'Log has {len(self.log)} entries with entries committed till index {self.commit_index}'
+    
+    def num_entries(self):
+        return len(self.log)
     
     def get_last_term_idx(self):
         if(len(self.log) == 0):
@@ -73,6 +77,15 @@ class Log:
             if self.log[i].index == idx:
                 return self.log[i].term
         return 0
+    
+    def get_entry_at_index(self, idx):
+        if idx == 0 or len(self.log) == 0:
+            return None
+        end = len(self.log) - 1
+        for i in range(end, -1, -1):
+            if self.log[i].index == idx:
+                return self.log[i]
+        return None
     
     def handle_incoming_entries(self, entries, lli, comm_idx):
         if not len(entries) == 0:

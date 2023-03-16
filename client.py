@@ -11,11 +11,12 @@ from utils import RaftConsts, Message
 from raft import ConsensusModule
 from log import Log, LogConsts
 
-connections = {}
+connections = dict()
 client_name = ""
 pid = 0
 message_queue = PriorityQueue()
 local_log = Log()
+parent_dict = dict()
 
 message_queue_lock = Lock()
 
