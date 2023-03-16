@@ -7,11 +7,14 @@ import config
 import threading
 import sys
 import shutil
+from freeports import free_ports
 from utils import Colors as c
 
 subprocess.call(['chmod', '+x', 'startup.sh'])
 
 pwd = os.getcwd()
+
+free_ports(list(config.CLIENT_PORTS.values()))
 
 if os.path.exists(config.FILES_PATH):
     # os.rmdir(config.FILES_PATH)

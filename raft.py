@@ -165,7 +165,7 @@ class ConsensusModule:
         if not term_t == message.llt:
             response = Message(m_type=RaftConsts.RESULT, term=self.term, ok=False, sender=self.id)
             tmp = pickle.dumps(response)
-            send_message(self.connections, message.c_id, tmp)
+            send_message(self.connections, message.l_id, tmp)
             print(f'Previous term and index do not match, rejected AppendRPC')
             return
 
@@ -179,7 +179,7 @@ class ConsensusModule:
 
         response = Message(m_type=RaftConsts.RESULT, term=self.term, lli=last_added_index, ok=True, sender=self.id)
         tmp = pickle.dumps(response)
-        send_message(self.connections, message.c_id, tmp)
+        send_message(self.connections, message.l_id, tmp)
 
         self.write_state_to_disk()
 
