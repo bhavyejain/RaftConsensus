@@ -35,7 +35,6 @@ class Log:
         self.log = []
         self.commit_index = 0
         self.id = client_name
-        self.last_committed = 0
 
     def __str__(self):
         return f'Log has {len(self.log)} entries with entries committed till index {self.commit_index}'

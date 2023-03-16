@@ -218,23 +218,40 @@ class StateMachine:
         self.id = client_name
         self.log = log
         self.parent_dict = parent_dict
-        self.counter = 1
+        self.last_committed = 0
+    
+    def reset_state_machine(self):
+        self.last_committed = 0
     
     def advance_state_machine(self):
-        if self.log.commit_index > self.log.last_committed:
+        if self.log.commit_index > self.last_committed:
             num_entries = self.log.num_entries()
-            while self.log.last_committed < num_entries and self.log.last_committed < self.log.commit_index:
-                self.log.last_committed = self.log.last_committed + 1
-                print(f'Executing entry at index {self.log.last_committed}')
-                entry = self.log.get_entry_at_index(self.log.last_committed)
+            while self.last_committed < num_entries and self.last_committed < self.log.commit_index:
+                self.last_committed = self.last_committed + 1
+                print(f'Executing entry at index {self.last_committed}')
+                entry = self.log.get_entry_at_index(self.last_committed)
                 if entry.op_t == LogConsts.CREATE:
-                    print()
+                    self.handle_create(entry)
                 elif entry.op_t == LogConsts.PUT:
-                    print()
+                    self.handle_put(entry)
                 elif entry.op_t == LogConsts.GET:
-                    print()
+                    self.handle_get(entry)
 
-    def handle_create(self):
-        new_id = f'{self.id}_{self.counter}'
-        self.counter = self.counter + 1
-        self.parent_dict[new_id] = dict()
+    def handle_create(self, entry):
+        new_id = entry.dict_id
+        if self.id in entry.members:
+            self.parent_dict[new_id] = dict()
+            print(f'Created new dictionary with id {new_id}')
+    
+    def handle_put(self, entry):
+        if entry.dict_id in self.parent_dict.keys():
+            key = entry.keyval[0]
+            val = entry.keyval[1]
+            self.parent_dict[entry.dict_id][key] = val
+            print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
+    
+    def handle_get(self, entry):
+        if entry.dict_id in self.parent_dict.keys():
+            key = entry.key
+            val = self.parent_dict[entry.dict_id][key]
+            print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')
