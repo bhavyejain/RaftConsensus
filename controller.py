@@ -6,17 +6,24 @@ import socket
 import config
 import threading
 import sys
+import shutil
 from utils import Colors as c
 
 subprocess.call(['chmod', '+x', 'startup.sh'])
 
 pwd = os.getcwd()
-print(f"================= {c.SELECTED}STARTING LACHAIN{c.ENDC} =================")
+
+if os.path.exists(config.FILES_PATH):
+    # os.rmdir(config.FILES_PATH)
+    shutil.rmtree(config.FILES_PATH)
+os.mkdir(config.FILES_PATH)
+
+print(f"================= {c.SELECTED}STARTING RAFT{c.ENDC} =================")
 
 for client in config.CLIENT_PORTS.keys():
     print(f'Starting {client}...')
     applescript.tell.app("Terminal",f'do script "{pwd}/startup.sh {client}"')
-    time.sleep(0.2)
+    time.sleep(0.5)
 
 client_name = "CLI"
 
@@ -83,6 +90,10 @@ def execute_command(seg_cmd):
         client = seg_cmd[1]
         cmd = f'FAILPROCESS'
         connections[client].sendall(bytes(cmd, "utf-8"))
+
+    elif op_type == "start":
+        for _, connection in connections.items():
+            connection.sendall(bytes("START", "utf-8"))
     
     elif op_type == "delay":
         t = float(seg_cmd[1])
@@ -135,11 +146,7 @@ def connect_to(name, port):
     thread.start()
 
 if __name__ == "__main__":
-
-    if os.path.exists(config.FILES_PATH):
-        os.rmdir(config.FILES_PATH)
-    os.mkdir(config.FILES_PATH)
-
+    time.sleep(1)
     for client, port in config.CLIENT_PORTS.items():
         connect_to(client, port)
 

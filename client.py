@@ -6,7 +6,7 @@ import time
 import utils
 from threading import Lock
 from utils import Colors as c
-from queue import PriorityQueue
+from queue import PriorityQueue, Queue
 import pickle
 from utils import RaftConsts, Message
 from raft import ConsensusModule, StateMachine
@@ -18,10 +18,10 @@ from cryptography.hazmat.primitives import serialization
 connections = dict()
 client_name = ""
 pid = 0
-message_queue = PriorityQueue()
-local_log = Log()
+message_queue = Queue()
 parent_dict = dict()
 counter = 0
+consensus_module = ...
 
 message_queue_lock = Lock()
 
@@ -34,7 +34,7 @@ def handle_client(client, client_id):
             if raw_message:
                 try:
                     message = pickle.loads(raw_message)
-                    print(f'Queueing message from {client_id}')
+                    # print(f'Queueing message from {client_id}')
                     with message_queue_lock:
                         message_queue.put((round(time.time(), 2), message))
                 except pickle.UnpicklingError:
@@ -77,7 +77,7 @@ def handle_cli(client, client_id):
                     comp = message.split()
                     dict_id = comp[1]
                     tmp = f'===== Dictionary {dict_id} =====\n'
-                    for key, val in parent_dict[dict_id]:
+                    for key, val in parent_dict[dict_id].items():
                         tmp = tmp + f'{key} \t : \t {val}\n'
                     tmp = tmp + f'============================='
                     print(tmp)
@@ -97,6 +97,9 @@ def handle_cli(client, client_id):
                     for key in parent_dict.keys():
                         tmp = tmp + f'{key}\n'
                     print(tmp)
+                elif message == "START":
+                    print("Starting consensus module...")
+                    consensus_module.start_module(parent_dict=parent_dict)
             else:
                 print(f'handle_cli# Closing connection to {client_id}')
                 client.close()
@@ -107,21 +110,21 @@ def handle_cli(client, client_id):
 
 def process_messages():
     global message_queue, message_queue_lock, consensus_module
+    print("Starting message queue processor...")
     while True:
-        with message_queue_lock:
-            msg = message_queue.get(block=True, timeout=None)
+        msg = message_queue.get(block=True, timeout=None)
         delta1 = round((time.time() -  msg[0]), 2)
         delta2 = round((config.DEF_DELAY - delta1), 2) if delta1 < config.DEF_DELAY else 0
         time.sleep(delta2)
         message = msg[1]
-        print(f'processing message of type {message.m_type.value}')
+        # print(f'processing message of type {message.m_type.value}')
         consensus_module.handle_message(message)
 
 def receive():
-    global consensus_module
-    while True:
+    global consensus_module, parent_dict
+    while len(connections) < (len(config.CLIENT_PORTS) - 1):
         # Accept Connection
-        client, addr = mySocket.accept()
+        client, _ = mySocket.accept()
         client.setblocking(True)
         client_id = client.recv(config.BUFF_SIZE).decode()
         print(f"receive# Connecting with {client_id}...")
@@ -131,38 +134,10 @@ def receive():
         else:
             target = handle_client
             connections[client_id] = client
-            if len(connections) == (len(config.CLIENT_PORTS) - 1):
-                print("Starting up consensus module...")
-                consensus_module.start_module()
-                print(f'================= STARTUP COMPLETE =================')
-
+        
         thread = threading.Thread(target=target, args=(client, client_id, ))
         thread.start()
-
-def connect_running_clients():
-    for n in range(1, pid):
-        client_tc = f'c_{n}'
-        print(f'startup# Connecting to {client_tc}...')
-        try:
-            connections[client_tc] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            connections[client_tc].connect((config.HOST, config.CLIENT_PORTS[client_tc]))
-            connections[client_tc].setblocking(True)
-            connections[client_tc].sendall(bytes(client_name, "utf-8"))
-            print(f"startup# {connections[client_tc].recv(config.BUFF_SIZE).decode()}")
-            thread = threading.Thread(target=handle_client, args=(connections[client_tc], client_tc,))
-            thread.start()
-        except:
-            print(f'{c.ERROR}startup# Failed to connect to {client_tc}!{c.ENDC}')
-
-if __name__ == "__main__":
-    global consensus_module, state_machine
     
-    client_name = sys.argv[1]   # c_n
-    pid = config.client_name_MAP[client_name]
-
-    consensus_module = ConsensusModule(client_name, local_log, connections)
-    state_machine = StateMachine(client_name, local_log, parent_dict)
-
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=4096,
@@ -178,18 +153,56 @@ if __name__ == "__main__":
     with open(f'{config.FILES_PATH}/{client_name}_key.pem', 'wb') as f:
         f.write(pem)
 
-    print(f'================= BEGIN STARTUP =================')
-    print(f'startup# Setting up Client {client_name}...')
+    print("Setting up consensus module...")
+    consensus_module = ConsensusModule(client_name=client_name, log=local_log, connections=connections)
+    print(f'================= STARTUP COMPLETE =================')
 
-    # connect to clients that have started up
-    connect_running_clients()
+    while True:
+        client, _ = mySocket.accept()
+        client.setblocking(True)
+        client_id = client.recv(config.BUFF_SIZE).decode()
+        if client_id == "CLI":
+            print(f"receive# Connecting with {client_id}...")
+            thread = threading.Thread(target=handle_cli, args=(client, client_id, ))
+            thread.start()
+
+def connect_running_clients():
+    for n in range(1, pid):
+        client_tc = f'c_{n}'
+        print(f'startup# Connecting to {client_tc}...')
+        try:
+            connections[client_tc] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            connections[client_tc].connect((config.HOST, config.CLIENT_PORTS[client_tc]))
+            connections[client_tc].setblocking(True)
+            connections[client_tc].sendall(bytes(client_name, "utf-8"))
+            print(f"startup# {connections[client_tc].recv(config.BUFF_SIZE).decode()}")
+            thread = threading.Thread(target=handle_client, args=(connections[client_tc], client_tc,))
+            thread.start()
+        except:
+            connections.pop(client_tc)
+            print(f'{c.ERROR}startup# Failed to connect to {client_tc}!{c.ENDC}')
+
+if __name__ == "__main__":
+    global local_log, state_machine
+    
+    print(f'================= BEGIN STARTUP =================')
+    client_name = sys.argv[1]   # c_n
+    pid = config.CLIENT_ID_MAP[client_name]
+
+    local_log = Log(client_name)
+    # state_machine = StateMachine(client_name, local_log, parent_dict)
+
+    print(f'startup# Setting up Client {client_name}...')
 
     message_queue_thread = threading.Thread(target=process_messages, args=())
     message_queue_thread.start()
 
     print("Starting up state machine...")
-    state_machine_thread = threading.Thread(target=state_machine.advance_state_machine, args=())
-    state_machine_thread.start()
+    # state_machine_thread = threading.Thread(target=state_machine.advance_state_machine, args=())
+    # state_machine_thread.start()
+
+    # connect to clients that have started up
+    connect_running_clients()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as mySocket:
         mySocket.bind((config.HOST, config.CLIENT_PORTS[client_name]))

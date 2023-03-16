@@ -36,11 +36,12 @@ class _TimerReset(Thread):
                     # print "Time: %s - timer waiting for timeout in %.2f..." % (time.asctime(), self.interval)
                     self.resetted = False
                     self.finished.wait(self.interval)
+                
+                self.running = False
 
                 if not self.finished.isSet():
                     self.function(*self.args, **self.kwargs)
                 
-                self.running = False
                 # self.finished.set()
                 # print "Time: %s - timer finished!" % time.asctime()
     

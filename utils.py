@@ -51,7 +51,7 @@ class Message:
         self.sender = sender
 
 def broadcast(connections, message):
-    for _, connection in connections:
+    for _, connection in connections.items():
         connection.sendall(message)
 
 def send_message(connections, id, message):

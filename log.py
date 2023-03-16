@@ -86,6 +86,10 @@ class Log:
                 return self.log[i]
         return None
     
+    def get_entries_from_index(self, idx):
+        entries = self.log[(idx-1):]
+        return entries
+
     def handle_incoming_entries(self, entries, lli, comm_idx):
         if not len(entries) == 0:
             idx = 0

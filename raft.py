@@ -15,8 +15,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
         self.role = RaftConsts.FOLLOWER
-        self.timeout = random.randint((config.DEF_TIMEOUT*3 + 1), (config.DEF_DELAY*6)) # 3T+1 < timeout < 5T
-        print(f'Starting consensus module with timeout {self.timeout} seconds')
+        self.timeout = random.randint((config.DEF_DELAY*3 + 1), (config.DEF_DELAY*6)) # 3T+1 < timeout < 5T
+        print(f'Setting up consensus module with timeout {self.timeout} seconds')
         self.voted_for = ""
         self.id = client_name
         self.term = 0
@@ -27,11 +27,12 @@ class ConsensusModule:
         self.commit_index = 0
         self.quorum = int(len(config.CLIENT_PORTS)/2) + 1
         self.next_index = {}
-        for client, _ in config.CLIENT_PORTS:
+        for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = 0
         self.replies_for_append = {}
-        self.pbar = tqdm(total=(self.timeout), desc="Timeout:", ncols=100, colour='CYAN', bar_format='{l_bar}{bar}|')
+        self.pbar = tqdm(total=(self.timeout), desc="Timeout:", ncols=50, colour='CYAN', bar_format='{l_bar}{bar}|')
+        print()
 
     def update_pbar(self):
         while True:
@@ -42,10 +43,15 @@ class ConsensusModule:
         self.pbar.refresh()
         self.pbar.reset()
 
-    def start_module(self):
+    def start_module(self, parent_dict):
+        print("Starting consensus module...")
         self.election_timer.start()
         pbar_thread = threading.Thread(target=self.update_pbar, args=())
         pbar_thread.start()
+
+        state_machine = StateMachine(self.id, self.log, parent_dict)
+        state_machine_thread = threading.Thread(target=state_machine.advance_state_machine, args=())
+        state_machine_thread.start()
 
     def start_new_election(self):
         self.election_timer.restart()
@@ -58,6 +64,7 @@ class ConsensusModule:
         request_vote = Message(m_type=RaftConsts.REQVOTE, term=self.term, c_id=self.id, lli=lli, llt=llt)
         tmp = pickle.dumps(request_vote)
         self.votes = 0
+        print(f'Broadcasting vote request for term {self.term}...')
         broadcast(connections=self.connections, message=tmp)
         self.write_state_to_disk()
 
@@ -79,7 +86,7 @@ class ConsensusModule:
         heartbeat_thread = threading.Thread(target=self.heartbeat, args=())
         heartbeat_thread.start()
         _, lli = self.log.get_last_term_idx()
-        for client, _ in config.CLIENT_PORTS:
+        for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = lli + 1
         self.replies_for_append.clear()
@@ -101,6 +108,8 @@ class ConsensusModule:
                     self.voted_for = message.c_id
                     vote_granted = True
                     print(f'Granted vote to {message.c_id} for term {message.term}')
+                    self.election_timer.reset()
+                    self.reset_pbar()
 
         if not vote_granted:
             print(f'Refused vote to {message.c_id} for term {message.term}')
@@ -125,11 +134,12 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def send_append_rpc(self, client=None):
-        for follower, next_idx in self.next_index:
+        for follower, next_idx in self.next_index.items():
             if client == None or client == follower:
-                entries = self.log[(next_idx-1):]
-                if not (len(entries) == 0 and entries[-1].index in self.replies_for_append.keys()):
-                    self.replies_for_append[entries[-1].index] = set()
+                entries = self.log.get_entries_from_index(next_idx)
+                if not (len(entries) == 0):
+                    if entries[-1].index in self.replies_for_append.keys():
+                        self.replies_for_append[entries[-1].index] = set()
                 lli = next_idx - 1
                 llt = self.log.get_term_at_index(lli)
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
@@ -205,14 +215,14 @@ class ConsensusModule:
     
     def update_next_index(self):
         _, lli = self.log.get_last_term_idx()
-        for client, _ in config.CLIENT_PORTS:
+        for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = lli + 1
 
     def write_state_to_disk(self):
         filename = f'{config.FILES_PATH}/{self.id}_statevars.txt'
         with open(filename, "w+") as state:
-            state.write(self.term)
+            state.write(str(self.term))
             state.write(self.voted_for)
 
     def read_state_from_disk(self):
