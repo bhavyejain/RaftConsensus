@@ -9,6 +9,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+PVT_KEY_HASH_LEN = 50
+
 class Colors:
     VIOLET = '\033[94m'
     BLUE = '\033[36m'
@@ -61,7 +63,7 @@ def get_encrypted_key_path(id):
     path = f'{config.FILES_PATH}/{id}_key.pem'
     return path
 
-def generate_encryption_keys(key_size=4096):
+def generate_encryption_keys(key_size=1024):
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=key_size,
@@ -77,9 +79,6 @@ def save_public_key(public_key, id):
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
     path = get_encrypted_key_path(id)
-    if os.path.isfile(path):
-        print("Path already exists - fix this")
-        return
     with open(path, 'wb') as f:
         f.write(pem)
 
@@ -113,6 +112,36 @@ def get_decrypted_message(private_key, message):
                         )
     return decrypted_message
 
+def convert_private_key_to_bytes(private_key):
+    data = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    return data
+
+def convert_bytes_to_private_key(data):
+    private_key = serialization.load_pem_private_key(
+                    data,
+                    password=None,
+                    backend=default_backend()
+                  )
+    return private_key
+
+def convert_public_key_to_bytes(public_key):
+    data = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return data
+
+def convert_bytes_to_public_key(data):
+    public_key = serialization.load_pem_public_key(
+                    data,
+                    backend=default_backend()
+                )
+    return public_key
+
 def broadcast(connections, message):
     for client_name, connection in connections.items():
         # public_key = get_public_key(client_name)
@@ -137,16 +166,19 @@ CLIENT_COUNT = len(config.CLIENT_PORTS)
 
 def prepare_create_entry(term, id, counter, members):
     dict_id = f'{id}_{counter}'
-    private_key, public_key = generate_encryption_keys(1024)
-    # save_public_key(public_key, dict_id)
+    private_key, public_key = generate_encryption_keys()
+    private_key_in_bytes = convert_private_key_to_bytes(private_key)
+    public_key_in_bytes = convert_public_key_to_bytes(public_key)
+    encrypted_private_key = private_key_in_bytes[:PVT_KEY_HASH_LEN]
+    non_encrypted_private_key = private_key_in_bytes[PVT_KEY_HASH_LEN:]
     private_key_set = dict()
     for member in members:
         mem_pub_key = get_public_key(member)
-        private_key_set[member] = get_encrypted_message(mem_pub_key, private_key)
+        private_key_set[member] = get_encrypted_message(mem_pub_key, encrypted_private_key)
     entry = LogEntry(term=term, op_t=LogConsts.CREATE, dict_id=dict_id,
-                     members=members, pub_key=public_key,
-                     pri_keys=pickle.dumps(private_key_set))
-    return entry, public_key, private_key
+                     members=members, pub_key=public_key_in_bytes,
+                     pri_keys=pickle.dumps(private_key_set), rem_pri_key=non_encrypted_private_key)
+    return entry
 
 def prepare_put_entry(term, dict_id, issuer, keyval, dict_pub_key):
     encrypted_keyval = get_encrypted_message(dict_pub_key, pickle.dumps(keyval))

@@ -8,7 +8,7 @@ from threading import Lock
 from utils import Colors as c
 from queue import PriorityQueue, Queue
 import pickle
-from utils import Consts, RaftConsts, Message, get_decrypted_message, generate_encryption_keys, save_public_key
+from utils import Consts, RaftConsts, Message, get_decrypted_message, generate_encryption_keys, save_public_key, convert_bytes_to_private_key, convert_bytes_to_public_key
 from raft import ConsensusModule, StateMachine
 from log import Log, LogConsts
 from cryptography.hazmat.backends import default_backend
@@ -80,11 +80,13 @@ def handle_cli(client, client_id):
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
                     entry = utils.prepare_create_entry(consensus_module.term, client_name, counter, member_clients)
-                    dict_keys[entry.dict_id][Consts.PUBLIC] = entry.pub_key
+                    dict_keys[entry.dict_id] = dict()
+                    dict_keys[entry.dict_id][Consts.PUBLIC] = convert_bytes_to_public_key(entry.pub_key)
                     if client_name in member_clients:
                         # Adding dict private key in my config only if I have access
                         private_keys_dict = pickle.loads(entry.pri_keys)
-                        dict_keys[entry.dict_id][Consts.PRIVATE] = get_decrypted_message(private_key, private_keys_dict[client_name])
+                        encrypted_pvt_key = get_decrypted_message(private_key, private_keys_dict[client_name])
+                        dict_keys[entry.dict_id][Consts.PRIVATE] = convert_bytes_to_private_key(encrypted_pvt_key+entry.rem_pri_key)
                     add_to_log(entry)
                 elif message.startswith("PUT"):
                     comp = message.split()

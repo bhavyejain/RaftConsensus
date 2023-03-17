@@ -4,7 +4,7 @@ from log import LogConsts
 import config
 from timer import ElectionTimer
 import random
-from utils import Consts, RaftConsts, Message, broadcast, send_message, get_decrypted_message
+from utils import Consts, RaftConsts, Message, broadcast, send_message, get_decrypted_message, convert_bytes_to_private_key, convert_bytes_to_public_key
 import pickle
 import time
 import threading
@@ -308,12 +308,13 @@ class StateMachine:
 
     def handle_create(self, entry):
         new_id = entry.dict_id
+        self.dict_keys[new_id] = dict()
+        self.dict_keys[new_id][Consts.PUBLIC] = convert_bytes_to_public_key(entry.pub_key)
         if self.id in entry.members:
             self.parent_dict[new_id] = dict()
-            self.dict_keys[new_id][Consts.PUBLIC] = entry.pub_key
             private_keys_dict = pickle.loads(entry.pri_keys)
-            self.dict_keys[new_id][Consts.PRIVATE] = get_decrypted_message(self.private_key,
-                                                                           private_keys_dict[self.id])
+            encrypted_pvt_key = get_decrypted_message(self.private_key, private_keys_dict[self.id])
+            self.dict_keys[new_id][Consts.PRIVATE] = convert_bytes_to_private_key(encrypted_pvt_key+entry.rem_pri_key)
             print(f'Created new dictionary with id {new_id}')
     
     def handle_put(self, entry):
