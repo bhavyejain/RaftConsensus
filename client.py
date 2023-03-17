@@ -15,6 +15,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
+static_connections = dict()
 connections = dict()
 client_name = ""
 pid = 0
@@ -23,6 +24,8 @@ parent_dict = dict()
 parent_dict["members"] = dict()
 counter = 0
 consensus_module = ...
+failed_links = list()
+is_failed = False
 private_key = ...
 
 message_queue_lock = Lock()
@@ -35,6 +38,10 @@ def handle_client(client, client_id):
             raw_message = client.recv(config.BUFF_SIZE)
             if raw_message:
                 try:
+                    # NODE_FAIL_HANDLING
+                    if is_failed or client_id in failed_links:
+                        print("Either node failed or link failed to {}".format(client_id))
+                        continue
                     message = pickle.loads(raw_message)
                     # print(f'Queueing message from {client_id}')
                     with message_queue_lock:
@@ -57,13 +64,16 @@ def add_to_log(entry):
         consensus_module.send_append_rpc()
 
 def handle_cli(client, client_id):
-    global local_log, parent_dict, consensus_module, counter
+    global local_log, parent_dict, consensus_module, is_failed, static_connections, message_queue, counter
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
             message = client.recv(config.BUFF_SIZE).decode()
             if message:
                 print(f'{c.VIOLET}{client_id}{c.ENDC}: {message}')
+                if is_failed and not message.startswith("FIXPROCESS"):
+                    print("Node was crashed. Fix it before for anything")
+                    continue
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
                     entry = utils.prepare_create_entry(client_name, counter, member_clients, consensus_module.term)
@@ -88,14 +98,30 @@ def handle_cli(client, client_id):
                 elif message.startswith("FAILLINK"):
                     comp = message.split()
                     conn_name = comp[1] # basically the other client name
-                    # TODO: add failure logic
+                    # NODE_FAIL_HANDLING: add failure logic
+                    print(f'Failing the link with {conn_name}')
+                    failed_links.append(conn_name)
+                    connections.pop(conn_name)
                 elif message.startswith("FIXLINK"):
                     comp = message.split()
                     conn_name = comp[1] # basically the other client name
-                    # TODO: add fix logic
+                    # NODE_FAIL_HANDLING: add fix link logic
+                    print(f'Fixing the link with {conn_name}')
+                    failed_links.remove(conn_name)
+                    connections[conn_name] = static_connections[conn_name]
                 elif message == "FAILPROCESS":
                     print("I CRASHED!")
-                    # TODO: add failure logic
+                    # NODE_FAIL_HANDLING: add failure logic
+                    is_failed = True
+                    connections = dict()
+                    with message_queue_lock:
+                        message_queue = Queue()
+                    consensus_module.go_to_fail_state()
+                elif message == "FIXPROCESS":
+                    print("Re born")
+                    consensus_module.restore_node()
+                    is_failed = False
+                    # NODE_FAIL_HANDLING: add fix node logic
                 elif message == "PRINTALL":
                     tmp = f'Dictionary IDs with {client_name} as member:\n'
                     for key in parent_dict.keys():
@@ -121,10 +147,17 @@ def process_messages():
         delta2 = round((config.DEF_DELAY - delta1), 2) if delta1 < config.DEF_DELAY else 0
         time.sleep(delta2)
         message = msg[1]
+
+        # NODE_FAIL_HANDLING
+        if is_failed or message.c_id in failed_links:
+            print(f'Not processing the message from {message.c_id} due to failed link')
+            continue
+        # print(f'processing message of type {message.m_type.value}')
         consensus_module.handle_message(message)
 
 def receive():
-    global consensus_module, parent_dict, private_key
+    global consensus_module, parent_dict, private_key, static_connections
+
     while len(connections) < (len(config.CLIENT_PORTS) - 1):
         # Accept Connection
         client, _ = mySocket.accept()
@@ -157,6 +190,8 @@ def receive():
         f.write(pem)
 
     print("Setting up consensus module...")
+    # NODE_FAIL_HANDLING
+    static_connections = connections.copy()
     consensus_module = ConsensusModule(client_name=client_name, log=local_log, connections=connections)
     print(f'================= STARTUP COMPLETE =================')
 
