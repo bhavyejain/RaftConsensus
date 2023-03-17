@@ -109,13 +109,14 @@ def handle_cli(client, client_id):
                     print("I CRASHED!")
                     # NODE_FAIL_HANDLING: add failure logic
                     is_failed = True
+                    connections = dict()
                     with message_queue_lock:
                         message_queue = Queue()
                     consensus_module.go_to_fail_state()
                 elif message == "FIXPROCESS":
                     print("Re born")
                     consensus_module.restore_node()
-                    is_failed = True
+                    is_failed = False
                     # NODE_FAIL_HANDLING: add fix node logic
                 elif message == "PRINTALL":
                     tmp = f'Dictionary IDs with {client_name} as member:\n'
@@ -137,17 +138,13 @@ def process_messages():
     global message_queue, message_queue_lock, consensus_module
     print("Starting message queue processor...")
     while True:
-        # NODE_FAIL_HANDLING message_queue should be empty
-        if message_queue.empty() or is_failed:
-            time.sleep(1)
-            continue
         msg = message_queue.get(block=True, timeout=None)
         delta1 = round((time.time() -  msg[0]), 2)
         delta2 = round((config.DEF_DELAY - delta1), 2) if delta1 < config.DEF_DELAY else 0
         time.sleep(delta2)
         message = msg[1]
         # NODE_FAIL_HANDLING
-        if message.c_id in failed_links:
+        if is_failed or message.c_id in failed_links:
             print(f'Not processing the message from {message.c_id} due to failed link')
             continue
         # print(f'processing message of type {message.m_type.value}')

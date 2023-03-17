@@ -251,6 +251,7 @@ class ConsensusModule:
         # NODE_FAIL_HANDLING
         self.read_state_from_disk()
         self.log.read_logs_from_disk()
+        self.commit_index = self.log.commit_index
         if self.state_machine is not None:
             self.state_machine.reset_state_machine()
         self.election_timer.restart()
