@@ -77,9 +77,6 @@ class ConsensusModule:
 
     def heartbeat(self):
         while self.role == RaftConsts.LEADER:
-            # print(f'Sending heartbeat <3 ...')
-            # self.send_append_rpc()
-            # time.sleep(config.DEF_DELAY * 2.5)
             with self.sending_rpc:
                 curr_time = round(time.time(), 2)
                 clients = []
@@ -184,7 +181,7 @@ class ConsensusModule:
         self.reset_pbar()
 
         term_t = self.log.get_term_at_index(message.lli)
-        print(f'Prev term: {term_t}')
+        # print(f'Prev term: {term_t}')
         if not term_t == message.llt:
             response = Message(m_type=RaftConsts.RESULT, term=self.term, ok=False, sender=self.id)
             tmp = pickle.dumps(response)
@@ -312,17 +309,21 @@ class StateMachine:
         new_id = entry.dict_id
         if self.id in entry.members:
             self.parent_dict[new_id] = dict()
+            self.parent_dict["members"][new_id] = entry.members
             print(f'Created new dictionary with id {new_id}')
     
     def handle_put(self, entry):
         if entry.dict_id in self.parent_dict.keys():
-            key = entry.keyval[0]
-            val = entry.keyval[1]
-            self.parent_dict[entry.dict_id][key] = val
-            print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
+            if entry.issuer in self.parent_dict["members"][entry.dict_id]:
+                key = entry.keyval[0]
+                val = entry.keyval[1]
+                self.parent_dict[entry.dict_id][key] = val
+                print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
     
     def handle_get(self, entry):
         if entry.dict_id in self.parent_dict.keys():
-            key = entry.key
-            val = self.parent_dict[entry.dict_id][key]
-            print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')
+            if entry.issuer in self.parent_dict["members"][entry.dict_id]:
+                key = entry.key
+                val = self.parent_dict[entry.dict_id][key]
+                if self.id == entry.issuer:
+                    print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')
