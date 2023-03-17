@@ -205,7 +205,7 @@ if __name__ == "__main__":
     connect_running_clients()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as mySocket:
-        mySocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR)
+        mySocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         mySocket.bind((config.HOST, config.CLIENT_PORTS[client_name]))
         mySocket.listen(5)
 

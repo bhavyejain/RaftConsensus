@@ -63,7 +63,7 @@ class ConsensusModule:
         llt, lli = self.log.get_last_term_idx()
         request_vote = Message(m_type=RaftConsts.REQVOTE, term=self.term, c_id=self.id, lli=lli, llt=llt)
         tmp = pickle.dumps(request_vote)
-        self.votes = 0
+        self.votes = 1
         print(f'Broadcasting vote request for term {self.term}...')
         broadcast(connections=self.connections, message=tmp)
         self.write_state_to_disk()
@@ -134,7 +134,7 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def send_append_rpc(self, client=None):
-        tmp = []
+        tmp_f = []
         for follower, next_idx in self.next_index.items():
             if client == None or client == follower:
                 entries = self.log.get_entries_from_index(next_idx)
@@ -146,9 +146,9 @@ class ConsensusModule:
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
                 tmp = pickle.dumps(msg)
                 send_message(self.connections, follower, tmp)
-                tmp.append(follower)
+                tmp_f.append(follower)
         
-        print(f'Sending AppendRPC to {", ".join(tmp)} with {len(entries)} entries')
+        print(f'Sending AppendRPC to {", ".join(tmp_f)} with {len(entries)} entries')
         self.write_state_to_disk()
 
     def handle_append_rpc(self, message):
