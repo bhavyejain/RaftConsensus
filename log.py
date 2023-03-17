@@ -1,6 +1,7 @@
 from enum import Enum
 import config
 import pickle
+import hashlib
 
 class LogConsts(Enum):
     CREATE = "CREATE"
@@ -20,6 +21,7 @@ class LogEntry:
         self.key = key
         self.keyval = keyval    # key value pair to be inserted
         self.rem_pri_key = rem_pri_key
+        self.hash = b''
     
     def __str__(self):
         tmp = f'Index {self.index} | Term {self.term} | Type {self.op_t} | DictID {self.dict_id}'
@@ -66,6 +68,8 @@ class Log:
     def append_log(self, log_entry):
         _, lli = self.get_last_term_idx()
         log_entry.index = lli + 1
+        if len(self.log):
+            log_entry.hash = hashlib.sha256(pickle.dumps(self.log[-1])).digest().hex()
         self.log.append(log_entry)
         self.write_logs_to_disk()
     
@@ -103,6 +107,11 @@ class Log:
                     else:
                         idx = idx - 1
             self.log = self.log[:idx]
+            if len(self.log):
+                old_hash = hashlib.sha256(pickle.dumps(self.log[-1])).digest().hex()
+                if old_hash != entries[0].hash:
+                    print("Hashing doesn't match !!!!")
+                    return
             for entry in entries:
                 self.log.append(entry)
 

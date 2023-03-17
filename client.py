@@ -143,8 +143,8 @@ def handle_cli(client, client_id):
                     print("Re born")
                     # NODE_FAIL_HANDLING
                     consensus_module.restore_node()
-                    is_failed = False
                     connections = static_connections.copy()
+                    is_failed = False
                 elif message == "PRINTALL":
                     tmp = f'Dictionary IDs with {client_name} as member:\n'
                     for key in parent_dict.keys():
