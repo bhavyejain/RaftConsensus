@@ -56,15 +56,15 @@ class ConsensusModule:
         self.pbar.reset()
 
     def start_module(self, parent_dict, dict_keys, private_key):
-        print("Starting consensus module...")
-        self.election_timer.start()
-        pbar_thread = threading.Thread(target=self.update_pbar, args=())
-        pbar_thread.start()
-
         print("Starting up state machine...")
         self.state_machine = StateMachine(self.id, self.log, parent_dict, dict_keys, private_key)
         state_machine_thread = threading.Thread(target=self.state_machine.advance_state_machine, args=())
         state_machine_thread.start()
+
+        print("Starting consensus module...")
+        self.election_timer.start()
+        pbar_thread = threading.Thread(target=self.update_pbar, args=())
+        pbar_thread.start()
 
     def start_new_election(self):
         self.election_timer.restart()
@@ -289,6 +289,17 @@ class ConsensusModule:
         if self.state_machine is not None:
             self.state_machine.reset_state_machine()
         self.election_timer.restart()
+    
+    # def start_module(self, parent_dict, dict_keys, private_key):
+    #     print("Starting up state machine...")
+    #     self.state_machine = StateMachine(self.id, self.log, parent_dict, dict_keys, private_key)
+    #     state_machine_thread = threading.Thread(target=self.state_machine.advance_state_machine, args=())
+    #     state_machine_thread.start()
+        
+    #     print("Starting consensus module...")
+    #     self.election_timer.start()
+    #     pbar_thread = threading.Thread(target=self.update_pbar, args=())
+    #     pbar_thread.start()
 
 class StateMachine:
     def __init__(self, client_name, log, parent_dict, dict_keys, private_key):

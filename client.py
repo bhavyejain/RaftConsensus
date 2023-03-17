@@ -145,7 +145,7 @@ def handle_cli(client, client_id):
                     consensus_module.go_to_fail_state()
                 elif message == "FIXPROCESS":
                     print("Re born")
-                    # NODE_FAIL_HANDLING
+                    consensus_module.start_module(parent_dict=parent_dict, dict_keys=dict_keys, private_key=private_key)
                     consensus_module.restore_node()
                     is_failed = False
                     connections = static_connections.copy()

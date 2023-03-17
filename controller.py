@@ -14,7 +14,6 @@ subprocess.call(['chmod', '+x', 'startup.sh'])
 pwd = os.getcwd()
 
 if os.path.exists(config.FILES_PATH):
-    # os.rmdir(config.FILES_PATH)
     shutil.rmtree(config.FILES_PATH)
 os.mkdir(config.FILES_PATH)
 
@@ -22,22 +21,25 @@ print(f"================= {c.SELECTED}STARTING RAFT{c.ENDC} =================")
 
 for client in config.CLIENT_PORTS.keys():
     print(f'Starting {client}...')
-    applescript.tell.app("Terminal",f'do script "{pwd}/startup.sh {client}"')
+    applescript.tell.app("Terminal",f'do script "{pwd}/startup.sh {client} 0"')
     time.sleep(0.5)
 
 client_name = "CLI"
 
 connections = {}
 
-def receive(app):
+def receive(app, name):
     while True:
         try:
             message = app.recv(config.BUFF_SIZE).decode()
             if not message:
                 app.close()
+                connections.pop(name)
                 break
         except:
-            app.close()
+            if name in connections.keys():
+                app.close()
+                connections.pop(name)
             break
 
 def execute_command(seg_cmd):
@@ -102,8 +104,10 @@ def execute_command(seg_cmd):
     # fix <client>
     elif op_type == "fix":
         client = seg_cmd[1]
-        cmd = f'FIXPROCESS'
-        connections[client].sendall(bytes(cmd, "utf-8"))
+        print(f'Reviving {client}...')
+        applescript.tell.app("Terminal",f'do script "{pwd}/startup.sh {client} 1"')
+        time.sleep(1)
+        connect_to(client, config.CLIENT_PORTS[client])
 
     elif op_type == "start":
         for _, connection in connections.items():
@@ -156,7 +160,7 @@ def connect_to(name, port):
     connections[name].connect((config.HOST, port))
     connections[name].sendall(bytes(client_name, "utf-8"))
     print(f"startup# {connections[name].recv(config.BUFF_SIZE).decode()}")
-    thread = threading.Thread(target=receive, args=(connections[name],))
+    thread = threading.Thread(target=receive, args=(connections[name], name))
     thread.start()
 
 if __name__ == "__main__":
