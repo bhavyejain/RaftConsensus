@@ -8,14 +8,9 @@ from threading import Lock
 from utils import Colors as c
 from queue import PriorityQueue, Queue
 import pickle
-from utils import Consts, RaftConsts, Message, get_decrypted_message, generate_encryption_keys, save_public_key, convert_bytes_to_private_key, convert_bytes_to_public_key
+from utils import Consts, RaftConsts, Message, get_encrypted_message, get_decrypted_message, generate_encryption_keys, save_public_key, convert_bytes_to_private_key, convert_bytes_to_public_key
 from raft import ConsensusModule, StateMachine
 from log import Log, LogConsts
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
 
 static_connections = dict()
 connections = dict()
@@ -66,9 +61,15 @@ def handle_client(client, client_id):
             # print(f'Exception: {e.__str__()}, Traceback: {e.__traceback__()}')
 
 def add_to_log(entry):
-    global local_log, consensus_module
+    global local_log, consensus_module, dict_keys
     if consensus_module.role == RaftConsts.LEADER:
         with consensus_module.sending_rpc:
+            if entry.op_t == LogConsts.PUT:
+                entry.keyval = get_encrypted_message(dict_keys[entry.dict_id][Consts.PUBLIC],
+                                                     pickle.dumps(entry.keyval))
+            elif entry.op_t == LogConsts.GET:
+                entry.key = get_encrypted_message(dict_keys[entry.dict_id][Consts.PUBLIC],
+                                                  pickle.dumps(entry.key))
             local_log.append_log(entry)
             consensus_module.send_append_rpc()
     else:
@@ -102,12 +103,12 @@ def handle_cli(client, client_id):
                 elif message.startswith("PUT"):
                     comp = message.split()
                     dict_id = comp[1]
-                    entry = utils.prepare_put_entry(dict_id, client_name, (comp[2], comp[3]), dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
+                    entry = utils.prepare_put_entry(dict_id, client_name, (comp[2], comp[3]), consensus_module.term)
                     add_to_log(entry)
                 elif message.startswith("GET"):
                     comp = message.split()
                     dict_id = comp[1]
-                    entry = utils.prepare_get_entry(dict_id, client_name, comp[2], dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
+                    entry = utils.prepare_get_entry(dict_id, client_name, comp[2], consensus_module.term)
                     add_to_log(entry)
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()

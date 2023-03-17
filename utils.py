@@ -183,12 +183,10 @@ def prepare_create_entry(id, counter, members, term=None):
                      pri_keys=pickle.dumps(private_key_set), rem_pri_key=non_encrypted_private_key)
     return entry
 
-def prepare_put_entry(dict_id, issuer, keyval, dict_pub_key, term=None):
-    encrypted_keyval = get_encrypted_message(dict_pub_key, pickle.dumps(keyval))
-    entry = LogEntry(term=term, op_t=LogConsts.PUT, dict_id=dict_id, issuer=issuer, keyval=encrypted_keyval)
+def prepare_put_entry(dict_id, issuer, keyval, term=None):
+    entry = LogEntry(term=term, op_t=LogConsts.PUT, dict_id=dict_id, issuer=issuer, keyval=keyval)
     return entry
 
-def prepare_get_entry(dict_id, issuer, key, dict_pub_key, term=None):
-    encrypted_key = get_encrypted_message(dict_pub_key, pickle.dumps(key))
-    entry = LogEntry(term=term, op_t=LogConsts.GET, dict_id=dict_id, issuer=issuer, key=encrypted_key)
+def prepare_get_entry(dict_id, issuer, key, term=None):
+    entry = LogEntry(term=term, op_t=LogConsts.GET, dict_id=dict_id, issuer=issuer, key=key)
     return entry
