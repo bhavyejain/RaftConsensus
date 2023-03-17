@@ -102,13 +102,19 @@ def handle_cli(client, client_id):
                 elif message.startswith("PUT"):
                     comp = message.split()
                     dict_id = comp[1]
-                    entry = utils.prepare_put_entry(dict_id, client_name, (comp[2], comp[3]), dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
-                    add_to_log(entry)
+                    if dict_id in dict_keys.keys():
+                        entry = utils.prepare_put_entry(dict_id, client_name, (comp[2], comp[3]), dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
+                        add_to_log(entry)
+                    else:
+                        print("Don't know the existence of dictionary")
                 elif message.startswith("GET"):
                     comp = message.split()
                     dict_id = comp[1]
-                    entry = utils.prepare_get_entry(dict_id, client_name, comp[2], dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
-                    add_to_log(entry)
+                    if dict_id in dict_keys.keys():
+                        entry = utils.prepare_get_entry(dict_id, client_name, comp[2], dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
+                        add_to_log(entry)
+                    else:
+                        print("Don't know the existence of dictionary")
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()
                     dict_id = comp[1]
