@@ -155,7 +155,7 @@ def broadcast(connections, message):
 
 def send_message(connections, id, message):
     # NODE_FAIL_HANDLING
-    if id in connections:
+    if id in connections.keys():
         # public_key = get_public_key(id)
         # # message is bytes anyways
         # encrypted_message = get_encrypted_message(public_key, message)

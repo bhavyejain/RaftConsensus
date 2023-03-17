@@ -58,6 +58,7 @@ def handle_client(client, client_id):
                     print(f'{raw_message.decode()}')
             else:
                 print(f'handle_client# Closing connection to {client_id}')
+                connections.pop(client_id)
                 client.close()
                 break
         except Exception as e:
@@ -76,7 +77,7 @@ def add_to_log(entry):
         utils.broadcast(connections=connections, message=tmp)
 
 def handle_cli(client, client_id):
-    global local_log, parent_dict, dict_keys, consensus_module, is_failed, static_connections, message_queue
+    global local_log, parent_dict, dict_keys, consensus_module, is_failed, static_connections, message_queue, connections
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -171,7 +172,7 @@ def process_messages():
         message = msg[1]
 
         # NODE_FAIL_HANDLING
-        if is_failed or message.c_id in failed_links:
+        if is_failed or message.c_id in failed_links or message.l_id in failed_links or message.sender in failed_links:
             print(f'Not processing the message from {message.c_id} due to failed link')
             continue
         # print(f'processing message of type {message.m_type.value}')

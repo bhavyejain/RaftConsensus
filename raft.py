@@ -46,9 +46,10 @@ class ConsensusModule:
         self.counter += 1
 
     def update_pbar(self):
-        while self.election_timer.running:
-            self.pbar.update(1)
-            time.sleep(1)
+        while True:
+            while self.election_timer.running:
+                self.pbar.update(1)
+                time.sleep(1)
 
     def reset_pbar(self):
         self.pbar.refresh()
@@ -85,7 +86,7 @@ class ConsensusModule:
                 curr_time = round(time.time(), 2)
                 clients = []
                 for client, last in self.last_append.items():
-                    if (curr_time - last) > (config.DEF_DELAY * 2):
+                    if (curr_time - last) > (config.DEF_DELAY * 2.75):
                         clients.append(client)
                 if len(clients) > 0:
                     print(f'Sending heartbeat <3 to {", ".join(clients)}...')
@@ -95,8 +96,6 @@ class ConsensusModule:
     def become_leader(self):
         print("I AM LEADER NOW!")
         self.role = RaftConsts.LEADER
-        heartbeat_thread = threading.Thread(target=self.heartbeat, args=())
-        heartbeat_thread.start()
         _, lli = self.log.get_last_term_idx()
         print(f'lli: {lli}')
         for client in config.CLIENT_PORTS.keys():
@@ -105,6 +104,8 @@ class ConsensusModule:
                 self.last_append[client] = 0
         self.replies_for_append.clear()
         self.election_timer.cancel()
+        heartbeat_thread = threading.Thread(target=self.heartbeat, args=())
+        heartbeat_thread.start()
         self.write_state_to_disk()
 
     def handle_vote_request(self, message):
@@ -173,8 +174,17 @@ class ConsensusModule:
 
     def handle_append_rpc(self, message):
         print(f'{message.l_id}: AppendRPC | term: {message.term} | entries: {len(message.entries)}')
+        if not len(message.entries) == 0:
+            last_added_index = message.entries[-1].index
+        else:
+            last_added_index = 0
+
         if message.term < self.term:
+            response = Message(m_type=RaftConsts.RESULT, term=self.term, lli=last_added_index, ok=False, sender=self.id)
+            tmp = pickle.dumps(response)
+            send_message(self.connections, message.l_id, tmp)
             return
+
         if message.term > self.term:
             self.term = message.term
             self.voted_for = ""
@@ -184,19 +194,17 @@ class ConsensusModule:
         self.election_timer.reset()
         self.reset_pbar()
         term_t = self.log.get_term_at_index(message.lli)
+
         # print(f'Prev term: {term_t}')
         if not term_t == message.llt:
-            response = Message(m_type=RaftConsts.RESULT, term=self.term, ok=False, sender=self.id)
+            response = Message(m_type=RaftConsts.RESULT, term=self.term, lli=last_added_index, ok=False, sender=self.id)
             tmp = pickle.dumps(response)
             send_message(self.connections, message.l_id, tmp)
             print(f'Previous term and index do not match, rejected AppendRPC')
             return
+
         self.log.handle_incoming_entries(message.entries, message.lli, message.comm_idx)
         self.commit_index = message.comm_idx
-        if not len(message.entries) == 0:
-            last_added_index = message.entries[-1].index
-        else:
-            last_added_index = 0
         response = Message(m_type=RaftConsts.RESULT, term=self.term, lli=last_added_index, ok=True, sender=self.id)
         tmp = pickle.dumps(response)
         send_message(self.connections, message.l_id, tmp)
@@ -205,12 +213,12 @@ class ConsensusModule:
     def handle_append_response(self, message):
         if self.role == RaftConsts.LEADER and message.term <= self.term:
             if message.ok == False:
-                print(f'{message.sender}: NACK | index: {message.lli}')
+                print(f'{message.sender}: NACK | index: {message.lli} | term: {message.term}')
                 self.next_index[message.sender] = self.next_index[message.sender] - 1
                 self.send_append_rpc(clients=[message.sender])
             else:
                 if not message.lli == 0:
-                    print(f'{message.sender}: ACK | index: {message.lli}')
+                    print(f'{message.sender}: ACK | index: {message.lli} | term: {message.term}')
                     self.replies_for_append[message.lli].add(message.sender)
                     # commit log(s)
                     if len(self.replies_for_append[message.lli]) >= self.quorum and message.lli > self.commit_index:
@@ -219,6 +227,7 @@ class ConsensusModule:
                         self.log.commit_index = self.commit_index
                     self.next_index[message.sender] = message.lli + 1
         elif self.role == RaftConsts.LEADER and message.term > self.term:
+            print(f'{message.sender}: NACK | index: {message.lli} | term: {message.term}')
             self.term = message.term
             self.voted_for = ""
             self.role = RaftConsts.FOLLOWER
