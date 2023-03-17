@@ -49,7 +49,7 @@ def execute_command(seg_cmd):
     elif op_type == "wait":
         input(f"Press {c.BLINK}ENTER{c.ENDC} to continue simulation...")
 
-    # create <leader_client> <member 1> <member 2> ...
+    # create <client> <member 1> <member 2> ...
     elif op_type == "create":
         client = seg_cmd[1]
         cmd = "CREATE"
@@ -57,25 +57,25 @@ def execute_command(seg_cmd):
             cmd = cmd + " " + member
         connections[client].sendall(bytes(cmd, "utf-8"))
     
-    # put <leader_client> <dict_id> <key> <value>
+    # put <client> <dict_id> <key> <value>
     elif op_type == "put":
         client = seg_cmd[1]
         cmd = f'PUT {seg_cmd[2]} {seg_cmd[3]} {seg_cmd[4]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
     
-    # get <leader_client> <key>
+    # get <client> <key>
     elif op_type == "get":
         client = seg_cmd[1]
         cmd = f'GET {seg_cmd[2]} {seg_cmd[3]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
     
-    # printdict <leader_client> <dict_id>
+    # printdict <client> <dict_id>
     elif op_type == "printdict":
         client = seg_cmd[1]
         cmd = f'PRINTDICT {seg_cmd[2]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
     
-    # printall <leader_client>
+    # printall <client>
     elif op_type == "printall":
         client = seg_cmd[1]
         cmd = f'PRINTALL'
