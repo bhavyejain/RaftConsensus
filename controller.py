@@ -87,6 +87,7 @@ def execute_command(seg_cmd):
         for fellow_client in seg_cmd[2:]:
             cmd = f'FAILLINK {fellow_client}'
             connections[client].sendall(bytes(cmd, "utf-8"))
+            time.sleep(0.5)
 
     # fixlink <client1> <client2> .....
     elif op_type == "fixlink":
@@ -94,6 +95,7 @@ def execute_command(seg_cmd):
         for fellow_client in seg_cmd[2:]:
             cmd = f'FIXLINK {fellow_client}'
             connections[client].sendall(bytes(cmd, "utf-8"))
+            time.sleep(0.5)
 
     # fail <client>
     elif op_type == "fail":

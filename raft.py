@@ -256,8 +256,8 @@ class ConsensusModule:
     def write_state_to_disk(self):
         filename = f'{config.FILES_PATH}/{self.id}_statevars.txt'
         with open(filename, "w+") as state:
-            state.write(str(self.term))
-            state.write(self.voted_for)
+            state.write(str(self.term)+'\n')
+            state.write(self.voted_for+'\n')
             state.write(str(self.counter))
 
     def read_state_from_disk(self):
