@@ -55,7 +55,7 @@ def handle_client(client, client_id):
                         with message_queue_lock:
                             message_queue.put((round(time.time(), 2), message))
                 except pickle.UnpicklingError:
-                    print(f'{raw_message.decode()}')
+                    print(f'handle_client# Error while deconding: {raw_message.decode()}')
             else:
                 print(f'handle_client# Closing connection to {client_id}')
                 connections.pop(client_id)
@@ -63,7 +63,7 @@ def handle_client(client, client_id):
                 break
         except Exception as e:
             print(f'{c.ERROR}handle_client# Exception thrown in {client_id} thread!{c.ENDC}')
-            print(f'Exception: {e.__str__()}, Traceback: {e.__traceback__()}')
+            # print(f'Exception: {e.__str__()}, Traceback: {e.__traceback__()}')
 
 def add_to_log(entry):
     global local_log, consensus_module
@@ -85,7 +85,7 @@ def handle_cli(client, client_id):
             if message:
                 print(f'{c.VIOLET}{client_id}{c.ENDC}: {message}')
                 if is_failed and not message.startswith("FIXPROCESS"):
-                    print("Node was crashed. Fix it before for anything")
+                    print(f"{c.ERROR}Node was crashed. Fix it first.{c.ENDC}")
                     continue
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
@@ -112,7 +112,7 @@ def handle_cli(client, client_id):
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()
                     dict_id = comp[1]
-                    tmp = f'===== Dictionary {dict_id} =====\n'
+                    tmp = f'===== {c.SELECTED}Dictionary {dict_id}{c.ENDC} =====\n'
                     for key, val in parent_dict[dict_id].items():
                         tmp = tmp + f'{key} \t : \t {val}\n'
                     tmp = tmp + f'============================='
@@ -121,18 +121,18 @@ def handle_cli(client, client_id):
                     comp = message.split()
                     conn_name = comp[1] # basically the other client name
                     # NODE_FAIL_HANDLING: add failure logic
-                    print(f'Failing the link with {conn_name}')
+                    print(f'{c.ERROR}Link with {conn_name} broken!{c.ENDC}')
                     failed_links.append(conn_name)
                     connections.pop(conn_name)
                 elif message.startswith("FIXLINK"):
                     comp = message.split()
                     conn_name = comp[1] # basically the other client name
                     # NODE_FAIL_HANDLING: add fix link logic
-                    print(f'Fixing the link with {conn_name}')
+                    print(f'{c.GREEN}Link with {conn_name} restored.{c.ENDC}')
                     failed_links.remove(conn_name)
                     connections[conn_name] = static_connections[conn_name]
                 elif message == "FAILPROCESS":
-                    print("I CRASHED!")
+                    print(f'{c.FAILED}I CRASHED!{c.ENDC}')
                     # NODE_FAIL_HANDLING
                     is_failed = True
                     connections.clear()
@@ -140,16 +140,18 @@ def handle_cli(client, client_id):
                         message_queue.queue.clear()
                     consensus_module.go_to_fail_state()
                 elif message == "FIXPROCESS":
-                    print("I AM ALIVE!")
+                    print(f'{c.SUCCESS}I AM ALIVE!{c.ENDC}')
                     # NODE_FAIL_HANDLING
                     consensus_module.restore_node()
                     connections = static_connections.copy()
                     is_failed = False
                 elif message == "PRINTALL":
-                    tmp = f'Dictionary IDs with {client_name} as member:\n'
+                    tmp = f'================================\n'
+                    tmp = tmp + f'Dictionaries with {client_name} as member:\n'
                     for key in parent_dict.keys():
                         if not key == "members":
                             tmp = tmp + f'{key}\n'
+                    tmp = tmp + f'================================\n'
                     print(tmp)
                 elif message == "START":
                     consensus_module.start_module(parent_dict=parent_dict, dict_keys=dict_keys, private_key=private_key)
@@ -239,16 +241,11 @@ if __name__ == "__main__":
     pid = config.CLIENT_ID_MAP[client_name]
 
     local_log = Log(client_name)
-    # state_machine = StateMachine(client_name, local_log, parent_dict)
 
     print(f'startup# Setting up Client {client_name}...')
 
     message_queue_thread = threading.Thread(target=process_messages, args=())
     message_queue_thread.start()
-
-    print("Starting up state machine...")
-    # state_machine_thread = threading.Thread(target=state_machine.advance_state_machine, args=())
-    # state_machine_thread.start()
 
     # connect to clients that have started up
     connect_running_clients()

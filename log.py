@@ -112,7 +112,7 @@ class Log:
             if len(self.log):
                 old_hash = hashlib.sha256(pickle.dumps(self.log[-1])).digest().hex()
                 if old_hash != entries[0].hash:
-                    print("Hashing doesn't match !!!!")
+                    print(f"\033[91m Hashing doesn't match!!!!\033[0m")
                     return
             for entry in entries:
                 self.log.append(entry)
