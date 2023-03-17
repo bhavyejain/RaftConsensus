@@ -8,7 +8,7 @@ class LogConsts(Enum):
     GET = "GET"
 
 class LogEntry:
-    def __init__(self, term, op_t, dict_id, index=None, members=None, pub_key=None, pri_keys=None, issuer=None, key=None, keyval=None):
+    def __init__(self, op_t, dict_id, term=None, index=None, members=None, pub_key=None, pri_keys=None, issuer=None, key=None, keyval=None):
         self.term = term
         self.index = index
         self.op_t = op_t    # operation type
