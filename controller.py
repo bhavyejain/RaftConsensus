@@ -81,17 +81,19 @@ def execute_command(seg_cmd):
         cmd = f'PRINTALL'
         connections[client].sendall(bytes(cmd, "utf-8"))
 
-    # faillink <client1> <client2>
+    # faillink <client1> <client2> .....
     elif op_type == "faillink":
         client = seg_cmd[1]
-        cmd = f'FAILLINK {seg_cmd[2]}'
-        connections[client].sendall(bytes(cmd, "utf-8"))
+        for fellow_client in seg_cmd[2:]:
+            cmd = f'FAILLINK {fellow_client}'
+            connections[client].sendall(bytes(cmd, "utf-8"))
 
-    # fixlink <client1> <client2>
+    # fixlink <client1> <client2> .....
     elif op_type == "fixlink":
         client = seg_cmd[1]
-        cmd = f'FIXLINK {seg_cmd[2]}'
-        connections[client].sendall(bytes(cmd, "utf-8"))
+        for fellow_client in seg_cmd[2:]:
+            cmd = f'FIXLINK {fellow_client}'
+            connections[client].sendall(bytes(cmd, "utf-8"))
 
     # fail <client>
     elif op_type == "fail":
