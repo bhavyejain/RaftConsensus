@@ -8,12 +8,14 @@ from threading import Lock
 from utils import Colors as c
 from queue import PriorityQueue, Queue
 import pickle
-from utils import RaftConsts, Message
+from utils import Consts, RaftConsts, Message, get_decrypted_message, generate_encryption_keys, save_public_key
 from raft import ConsensusModule, StateMachine
 from log import Log, LogConsts
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 
 static_connections = dict()
 connections = dict()
@@ -21,6 +23,7 @@ client_name = ""
 pid = 0
 message_queue = Queue()
 parent_dict = dict()
+dict_keys = dict() # key - dict id, val - dict {public: public_key, private: private_key}
 counter = 0
 consensus_module = ...
 failed_links = list()
@@ -30,7 +33,7 @@ private_key = ...
 message_queue_lock = Lock()
 
 def handle_client(client, client_id):
-    global message_queue, message_queue_lock
+    global message_queue, message_queue_lock, private_key
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -41,7 +44,8 @@ def handle_client(client, client_id):
                     if is_failed or client_id in failed_links:
                         print("Either node failed or link failed to {}".format(client_id))
                         continue
-                    message = pickle.loads(raw_message)
+                    decrypted_message = get_decrypted_message(private_key, raw_message)
+                    message = pickle.loads(decrypted_message)
                     # print(f'Queueing message from {client_id}')
                     with message_queue_lock:
                         message_queue.put((round(time.time(), 2), message))
@@ -62,7 +66,7 @@ def add_to_log(entry):
     consensus_module.send_append_rpc()
 
 def handle_cli(client, client_id):
-    global local_log, parent_dict, consensus_module, is_failed, static_connections, message_queue
+    global local_log, parent_dict, dict_keys, consensus_module, is_failed, static_connections, message_queue
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -75,14 +79,21 @@ def handle_cli(client, client_id):
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
                     entry = utils.prepare_create_entry(consensus_module.term, client_name, counter, member_clients)
+                    dict_keys[entry.dict_id][Consts.PUBLIC] = entry.pub_key
+                    if client_name in member_clients:
+                        # Adding dict private key in my config only if I have access
+                        private_keys_dict = pickle.loads(entry.pri_keys)
+                        dict_keys[entry.dict_id][Consts.PRIVATE] = get_decrypted_message(private_key, private_keys_dict[client_name])
                     add_to_log(entry)
                 elif message.startswith("PUT"):
                     comp = message.split()
-                    entry = utils.prepare_put_entry(consensus_module.term, comp[1], client_name, (comp[2], comp[3]))
+                    dict_id = comp[1]
+                    entry = utils.prepare_put_entry(consensus_module.term, dict_id, client_name, (comp[2], comp[3]), dict_keys[dict_id][Consts.PUBLIC])
                     add_to_log(entry)
                 elif message.startswith("GET"):
                     comp = message.split()
-                    entry = utils.prepare_put_entry(consensus_module.term, comp[1], client_name, comp[2])
+                    dict_id = comp[1]
+                    entry = utils.prepare_put_entry(consensus_module.term, dict_id, client_name, comp[2], dict_keys[dict_id][Consts.PUBLIC])
                     add_to_log(entry)
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()
@@ -108,7 +119,7 @@ def handle_cli(client, client_id):
                     connections[conn_name] = static_connections[conn_name]
                 elif message == "FAILPROCESS":
                     print("I CRASHED!")
-                    # NODE_FAIL_HANDLING: add failure logic
+                    # NODE_FAIL_HANDLING
                     is_failed = True
                     connections = dict()
                     with message_queue_lock:
@@ -116,16 +127,17 @@ def handle_cli(client, client_id):
                     consensus_module.go_to_fail_state()
                 elif message == "FIXPROCESS":
                     print("Re born")
+                    # NODE_FAIL_HANDLING
                     consensus_module.restore_node()
                     is_failed = False
-                    # NODE_FAIL_HANDLING: add fix node logic
+                    connections = static_connections.copy()
                 elif message == "PRINTALL":
                     tmp = f'Dictionary IDs with {client_name} as member:\n'
                     for key in parent_dict.keys():
                         tmp = tmp + f'{key}\n'
                     print(tmp)
                 elif message == "START":
-                    consensus_module.start_module(parent_dict=parent_dict)
+                    consensus_module.start_module(parent_dict=parent_dict, dict_keys=dict_keys, private_key=private_key)
             else:
                 print(f'handle_cli# Closing connection to {client_id}')
                 client.close()
@@ -170,20 +182,8 @@ def receive():
         thread = threading.Thread(target=target, args=(client, client_id, ))
         thread.start()
     
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=4096,
-        backend=default_backend()
-    )
-    public_key = private_key.public_key()
-
-    # write public key to disk and make available to all
-    pem = public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-    with open(f'{config.FILES_PATH}/{client_name}_key.pem', 'wb') as f:
-        f.write(pem)
+    private_key , public_key = generate_encryption_keys()
+    save_public_key(public_key, client_name)
 
     print("Setting up consensus module...")
     # NODE_FAIL_HANDLING

@@ -4,7 +4,7 @@ from log import LogConsts
 import config
 from timer import ElectionTimer
 import random
-from utils import RaftConsts, Message, broadcast, send_message
+from utils import Consts, RaftConsts, Message, broadcast, send_message, get_decrypted_message
 import pickle
 import time
 import threading
@@ -48,13 +48,13 @@ class ConsensusModule:
         self.pbar.refresh()
         self.pbar.reset()
 
-    def start_module(self, parent_dict):
+    def start_module(self, parent_dict, dict_keys, private_key):
         print("Starting consensus module...")
         self.election_timer.start()
         pbar_thread = threading.Thread(target=self.update_pbar, args=())
         pbar_thread.start()
 
-        self.state_machine = StateMachine(self.id, self.log, parent_dict)
+        self.state_machine = StateMachine(self.id, self.log, parent_dict, dict_keys, private_key)
         state_machine_thread = threading.Thread(target=self.state_machine.advance_state_machine, args=())
         state_machine_thread.start()
 
@@ -278,14 +278,17 @@ class ConsensusModule:
         self.election_timer.restart()
 
 class StateMachine:
-    def __init__(self, client_name, log, parent_dict):
+    def __init__(self, client_name, log, parent_dict, dict_keys, private_key):
         self.id = client_name
         self.log = log
         self.parent_dict = parent_dict
+        self.dict_keys = dict_keys
         self.last_committed = 0
+        self.private_key = private_key
     
     def reset_state_machine(self):
         self.last_committed = 0
+        self.parent_dict.clear()
     
     def advance_state_machine(self):
         while True:
@@ -295,29 +298,37 @@ class StateMachine:
                     self.last_committed = self.last_committed + 1
                     print(f'Executing entry at index {self.last_committed}')
                     entry = self.log.get_entry_at_index(self.last_committed)
-                    if entry.op_t == LogConsts.CREATE:
+                    op = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.op_t))
+                    if op == LogConsts.CREATE:
                         self.handle_create(entry)
-                    elif entry.op_t == LogConsts.PUT:
+                    elif op == LogConsts.PUT:
                         self.handle_put(entry)
-                    elif entry.op_t == LogConsts.GET:
+                    elif op == LogConsts.GET:
                         self.handle_get(entry)
+                    else:
+                        print("Decryption Failed i.e you dont have access - Check !!!")
             time.sleep(0.5) # check twice every second
 
     def handle_create(self, entry):
         new_id = entry.dict_id
         if self.id in entry.members:
             self.parent_dict[new_id] = dict()
+            self.dict_keys[new_id][Consts.PUBLIC] = entry.pub_key
+            private_keys_dict = pickle.loads(entry.pri_keys)
+            self.dict_keys[new_id][Consts.PRIVATE] = get_decrypted_message(self.private_key,
+                                                                           private_keys_dict[self.id])
             print(f'Created new dictionary with id {new_id}')
     
     def handle_put(self, entry):
         if entry.dict_id in self.parent_dict.keys():
-            key = entry.keyval[0]
-            val = entry.keyval[1]
+            key_val = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.keyval))
+            key = key_val[0]
+            val = key_val[1]
             self.parent_dict[entry.dict_id][key] = val
             print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
     
     def handle_get(self, entry):
         if entry.dict_id in self.parent_dict.keys():
-            key = entry.key
+            key = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.key))
             val = self.parent_dict[entry.dict_id][key]
             print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')
