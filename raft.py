@@ -16,9 +16,9 @@ from threading import Lock
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
         self.id = client_name
-        random.seed(int(client_name.split('_')[1])*60)
+        random.seed(int(client_name.split('_')[1])*100)
         self.role = RaftConsts.FOLLOWER
-        self.timeout = random.randint((config.DEF_DELAY*3 + 1), (config.DEF_DELAY*6)) # 3T+1 < timeout < 5T
+        self.timeout = random.randint((config.DEF_DELAY*3 + 2), (config.DEF_DELAY*8)) # 3T+1 < timeout < 5T
         print(f'Setting up consensus module with timeout {self.timeout} seconds')
         self.voted_for = ""
         self.term = 0
@@ -271,8 +271,9 @@ class ConsensusModule:
     
     def go_to_fail_state(self):
         # NODE_FAIL_HANDLING
+        self.role = RaftConsts.FOLLOWER
         self.election_timer.cancel()
-        self.next_index = dict()
+        self.next_index.clear()
         self.voted_for = ""
         self.term = 0
         self.log.clear()
@@ -288,6 +289,7 @@ class ConsensusModule:
         if self.state_machine is not None:
             self.state_machine.reset_state_machine()
         self.election_timer.restart()
+        self.reset_pbar()
 
 class StateMachine:
     def __init__(self, client_name, log, parent_dict, dict_keys, private_key):

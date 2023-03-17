@@ -135,12 +135,12 @@ def handle_cli(client, client_id):
                     print("I CRASHED!")
                     # NODE_FAIL_HANDLING
                     is_failed = True
-                    connections = dict()
+                    connections.clear()
                     with message_queue_lock:
-                        message_queue = Queue()
+                        message_queue.queue.clear()
                     consensus_module.go_to_fail_state()
                 elif message == "FIXPROCESS":
-                    print("Re born")
+                    print("I AM ALIVE!")
                     # NODE_FAIL_HANDLING
                     consensus_module.restore_node()
                     connections = static_connections.copy()

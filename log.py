@@ -2,6 +2,7 @@ from enum import Enum
 import config
 import pickle
 import hashlib
+import os
 
 class LogConsts(Enum):
     CREATE = "CREATE"
@@ -60,10 +61,11 @@ class Log:
     def read_logs_from_disk(self):
         self.log.clear()
         filename = f'{config.FILES_PATH}/{self.id}_log.log'
-        with open(filename, "rb") as log_file:
-            temp = pickle.load(log_file)
-            self.log = temp.log
-            self.commit_index = temp.commit_index
+        if os.path.exists(filename):
+            with open(filename, "rb") as log_file:
+                temp = pickle.load(log_file)
+                self.log = temp.log
+                self.commit_index = temp.commit_index
     
     def append_log(self, log_entry):
         _, lli = self.get_last_term_idx()
