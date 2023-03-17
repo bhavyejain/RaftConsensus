@@ -42,7 +42,7 @@ def handle_client(client, client_id):
                 try:
                     # NODE_FAIL_HANDLING
                     if is_failed or client_id in failed_links:
-                        print("Either node failed or link failed to {}".format(client_id))
+                        # print("Either node failed or link failed to {}".format(client_id))
                         continue
                     # decrypted_message = get_decrypted_message(private_key, raw_message)
                     # message = pickle.loads(decrypted_message)
@@ -173,7 +173,7 @@ def process_messages():
 
         # NODE_FAIL_HANDLING
         if is_failed or message.c_id in failed_links or message.l_id in failed_links or message.sender in failed_links:
-            print(f'Not processing the message from {message.c_id} due to failed link')
+            # print(f'Not processing the message from {message.c_id} due to failed link')
             continue
         # print(f'processing message of type {message.m_type.value}')
         consensus_module.handle_message(message)
