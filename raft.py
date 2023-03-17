@@ -29,14 +29,19 @@ class ConsensusModule:
         self.next_index = {}
         self.state_machine = None
         self.last_append = {}
+        self.counter = 0
 
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = 0
                 self.last_append[client] = 0
         self.replies_for_append = {}
+        self.sending_rpc = Lock()
         self.pbar = tqdm(total=(self.timeout), desc="Timeout:", colour='CYAN', bar_format='{l_bar}{bar}|')
         print()
+    
+    def update_counter(self):
+        self.counter += 1
 
     def update_pbar(self):
         while self.election_timer.running:
@@ -74,18 +79,16 @@ class ConsensusModule:
 
     def heartbeat(self):
         while self.role == RaftConsts.LEADER:
-            # print(f'Sending heartbeat <3 ...')
-            # self.send_append_rpc()
-            # time.sleep(config.DEF_DELAY * 2.5)
-            curr_time = round(time.time(), 2)
-            clients = []
-            for client, last in self.last_append.items():
-                if (curr_time - last) > (config.DEF_DELAY * 2):
-                    clients.append(client)
-            if len(clients) > 0:
-                print(f'Sending heartbeat <3 to {", ".join(clients)}...')
-                self.send_append_rpc(clients=clients)
-            time.sleep(0.25)
+            with self.sending_rpc:
+                curr_time = round(time.time(), 2)
+                clients = []
+                for client, last in self.last_append.items():
+                    if (curr_time - last) > (config.DEF_DELAY * 2):
+                        clients.append(client)
+                if len(clients) > 0:
+                    print(f'Sending heartbeat <3 to {", ".join(clients)}...')
+                    self.send_append_rpc(clients=clients)
+            time.sleep(0.5)
 
     def become_leader(self):
         print("I AM LEADER NOW!")
@@ -93,6 +96,7 @@ class ConsensusModule:
         heartbeat_thread = threading.Thread(target=self.heartbeat, args=())
         heartbeat_thread.start()
         _, lli = self.log.get_last_term_idx()
+        print(f'lli: {lli}')
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = lli + 1
@@ -129,7 +133,7 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def handle_vote_response(self, message):
-        print(f'Processing incoming vote for term {self.term}')
+        print(f'Vote | {message.ok} | term: {self.term}')
         if message.term > self.term:
             print("I AM FOLLOWER NOW")
             self.role = RaftConsts.FOLLOWER
@@ -143,27 +147,30 @@ class ConsensusModule:
             if self.votes >= self.quorum:
                 self.become_leader()
         self.write_state_to_disk()
+
     def send_append_rpc(self, clients=None):
         tmp_f = []
         for follower, next_idx in self.next_index.items():
-            if (len(clients) == 0) or (follower in clients):
+            if clients == None or (follower in clients):
                 entries = self.log.get_entries_from_index(next_idx)
                 if not (len(entries) == 0):
-                    if entries[-1].index in self.replies_for_append.keys():
+                    if not (entries[-1].index in self.replies_for_append.keys()):
                         self.replies_for_append[entries[-1].index] = set()
                 lli = next_idx - 1
                 llt = self.log.get_term_at_index(lli)
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
                 tmp = pickle.dumps(msg)
                 self.last_append[follower] = round(time.time(), 2)
+                print(f'Sending AppendRPC to {follower} | {len(entries)} entries | prev_index: {lli} | prev_term: {llt}')
                 send_message(self.connections, follower, tmp)
                 tmp_f.append(follower)
         
         if len(tmp_f) > 0:
-            print(f'Sending AppendRPC to {", ".join(tmp_f)} with {len(entries)} entries')
+            # print(f'Sending AppendRPC to {", ".join(tmp_f)} | {len(entries)} entries | prev_index: {lli} | prev_term: {llt}')
             self.write_state_to_disk()
+
     def handle_append_rpc(self, message):
-        print(f'Processing incoming AppendRPC for term {message.term} from leader {message.l_id} with {len(message.entries)} entries')
+        print(f'{message.l_id}: AppendRPC | term: {message.term} | entries: {len(message.entries)}')
         if message.term < self.term:
             return
         if message.term > self.term:
@@ -240,6 +247,7 @@ class ConsensusModule:
         with open(filename, "w+") as state:
             state.write(str(self.term))
             state.write(self.voted_for)
+            state.write(str(self.counter))
 
     def read_state_from_disk(self):
         filename = f'{config.FILES_PATH}/{self.id}_statevars.txt'
@@ -247,17 +255,19 @@ class ConsensusModule:
             term_ = state.readline().strip()
             self.term = int(term_)
             self.voted_for = state.readline()
+            counter_ = state.readline().strip()
+            self.counter = int(counter_)
     
     def go_to_fail_state(self):
         # NODE_FAIL_HANDLING
         self.election_timer.cancel()
         self.next_index = dict()
-        # TODO : Check voted_for and votes
         self.voted_for = ""
         self.term = 0
         self.log.clear()
         self.votes = 0
         self.commit_index = 0
+        self.counter = 0
     
     def restore_node(self):
         # NODE_FAIL_HANDLING

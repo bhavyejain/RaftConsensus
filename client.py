@@ -23,8 +23,8 @@ client_name = ""
 pid = 0
 message_queue = Queue()
 parent_dict = dict()
+parent_dict["members"] = dict()
 dict_keys = dict() # key - dict id, val - dict {public: public_key, private: private_key}
-counter = 0
 consensus_module = ...
 failed_links = list()
 is_failed = False
@@ -33,7 +33,7 @@ private_key = ...
 message_queue_lock = Lock()
 
 def handle_client(client, client_id):
-    global message_queue, message_queue_lock
+    global message_queue, message_queue_lock, consensus_module
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -47,9 +47,13 @@ def handle_client(client, client_id):
                     # decrypted_message = get_decrypted_message(private_key, raw_message)
                     # message = pickle.loads(decrypted_message)
                     message = pickle.loads(raw_message)
-                    # print(f'Queueing message from {client_id}')
-                    with message_queue_lock:
-                        message_queue.put((round(time.time(), 2), message))
+                    if message.m_type == RaftConsts.PASS and consensus_module.role == RaftConsts.LEADER:
+                        entry = message.entries[0]
+                        entry.term = consensus_module.term
+                        add_to_log(entry)
+                    elif not message.m_type == RaftConsts.PASS:
+                        with message_queue_lock:
+                            message_queue.put((round(time.time(), 2), message))
                 except pickle.UnpicklingError:
                     print(f'{raw_message.decode()}')
             else:
@@ -62,9 +66,14 @@ def handle_client(client, client_id):
 
 def add_to_log(entry):
     global local_log, consensus_module
-    local_log.append_log(entry)
-    consensus_module.update_next_index()
-    consensus_module.send_append_rpc()
+    if consensus_module.role == RaftConsts.LEADER:
+        with consensus_module.sending_rpc:
+            local_log.append_log(entry)
+            consensus_module.send_append_rpc()
+    else:
+        msg = Message(m_type=RaftConsts.PASS, entries=[entry])
+        tmp = pickle.dumps(msg)
+        utils.broadcast(connections=connections, message=tmp)
 
 def handle_cli(client, client_id):
     global local_log, parent_dict, dict_keys, consensus_module, is_failed, static_connections, message_queue
@@ -138,7 +147,8 @@ def handle_cli(client, client_id):
                 elif message == "PRINTALL":
                     tmp = f'Dictionary IDs with {client_name} as member:\n'
                     for key in parent_dict.keys():
-                        tmp = tmp + f'{key}\n'
+                        if not key == "members":
+                            tmp = tmp + f'{key}\n'
                     print(tmp)
                 elif message == "START":
                     consensus_module.start_module(parent_dict=parent_dict, dict_keys=dict_keys, private_key=private_key)

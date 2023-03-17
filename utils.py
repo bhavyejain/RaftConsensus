@@ -44,12 +44,13 @@ class RaftConsts(Enum):
     VOTE = "VOTE"
     APPEND = "APPEND"
     RESULT = "RESULT"
+    PASS = "PASS"
     FOLLOWER = "FOLLOWER"
     CANDIDATE = "CANDIDATE"
     LEADER = "LEADER"
 
 class Message:
-    def __init__(self, m_type, term, c_id=None, l_id=None, lli=None, llt=None, ok=None, entries=None, comm_idx=None, sender=None):
+    def __init__(self, m_type, term=None, c_id=None, l_id=None, lli=None, llt=None, ok=None, entries=None, comm_idx=None, sender=None):
         self.m_type = m_type
         self.term = term
         self.c_id = c_id
