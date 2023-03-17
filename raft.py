@@ -12,6 +12,7 @@ from tqdm import tqdm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from threading import Lock
+from utils import Colors as c
 
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
@@ -19,7 +20,7 @@ class ConsensusModule:
         random.seed(int(client_name.split('_')[1])*100)
         self.role = RaftConsts.FOLLOWER
         self.timeout = random.randint((config.DEF_DELAY*3 + 2), (config.DEF_DELAY*8)) # 3T+1 < timeout < 5T
-        print(f'Setting up consensus module with timeout {self.timeout} seconds')
+        print(f'Setting up consensus module with timeout {c.SELECTED}{self.timeout} sec{c.ENDC}')
         self.voted_for = ""
         self.term = 0
         self.election_timer = ElectionTimer(self.timeout, self.start_new_election)
@@ -57,6 +58,7 @@ class ConsensusModule:
 
     def start_module(self, parent_dict, dict_keys, private_key):
         print("Starting consensus module...")
+        print("Starting up state machine...")
         self.election_timer.start()
         pbar_thread = threading.Thread(target=self.update_pbar, args=())
         pbar_thread.start()
@@ -68,7 +70,7 @@ class ConsensusModule:
     def start_new_election(self):
         self.election_timer.restart()
         self.reset_pbar()
-        print(f'Starting new election!')
+        print(f'{c.UNDERLINE}Starting new election!{c.ENDC}')
         self.role = RaftConsts.CANDIDATE
         self.term = self.term + 1
         self.voted_for = self.id
@@ -76,7 +78,7 @@ class ConsensusModule:
         request_vote = Message(m_type=RaftConsts.REQVOTE, term=self.term, c_id=self.id, lli=lli, llt=llt)
         tmp = pickle.dumps(request_vote)
         self.votes = 1
-        print(f'Broadcasting vote request for term {self.term}...')
+        print(f'{c.YELLOW}Broadcasting vote request for term {self.term}...{c.ENDC}')
         broadcast(connections=self.connections, message=tmp)
         self.write_state_to_disk()
 
@@ -89,15 +91,14 @@ class ConsensusModule:
                     if (curr_time - last) > (config.DEF_DELAY * 2.75):
                         clients.append(client)
                 if len(clients) > 0:
-                    print(f'Sending heartbeat <3 to {", ".join(clients)}...')
+                    print(f'Sending heartbeat {c.ERROR}<3{c.ENDC} to {", ".join(clients)}...')
                     self.send_append_rpc(clients=clients)
             time.sleep(0.5)
 
     def become_leader(self):
-        print("I AM LEADER NOW!")
+        print(f"{c.SUCCESS}I AM LEADER!{c.ENDC}")
         self.role = RaftConsts.LEADER
         _, lli = self.log.get_last_term_idx()
-        print(f'lli: {lli}')
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = lli + 1
@@ -109,26 +110,26 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def handle_vote_request(self, message):
-        print(f'{message.c_id}: VoteRequest | term: {message.term}')
+        print(f'{c.YELLOW}{message.c_id}{c.ENDC}: VoteRequest | term: {message.term}')
         vote_granted = False
         if message.term > self.term:
             self.term = message.term
             self.voted_for = ""
             if self.role == RaftConsts.LEADER or self.role == RaftConsts.CANDIDATE:
                 self.role = RaftConsts.FOLLOWER
-                print("I AM FOLLOWER NOW")
+                print(f'{c.BLUE}Stepping down to follower.{c.ENDC}')
         if message.term == self.term:
             if self.voted_for == "" or self.voted_for == message.c_id:
                 llt, lli = self.log.get_last_term_idx()
                 if not ((message.llt < llt) or (message.llt == llt and message.lli < lli)):
                     self.voted_for = message.c_id
                     vote_granted = True
-                    print(f'Granted vote to {message.c_id} for term {message.term}')
+                    print(f'{c.GREEN}Granted vote{c.ENDC} to {message.c_id} for term {message.term}')
                     self.election_timer.reset()
                     self.reset_pbar()
 
         if not vote_granted:
-            print(f'Refused vote to {message.c_id} for term {message.term}')
+            print(f'{c.ERROR}Refused vote{c.ENDC} to {message.c_id} for term {message.term}')
 
         vote = Message(m_type=RaftConsts.VOTE, term=self.term, ok=vote_granted)
         tmp = pickle.dumps(vote)
@@ -136,9 +137,9 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def handle_vote_response(self, message):
-        print(f'Vote | {message.ok} | term: {self.term}')
+        print(f'{c.YELLOW}Vote{c.ENDC} | {message.ok} | term: {self.term}')
         if message.term > self.term:
-            print("I AM FOLLOWER NOW")
+            print(f'{c.BLUE}Stepping down to follower.{c.ENDC}')
             self.role = RaftConsts.FOLLOWER
             self.term = message.term
             self.voted_for = ""
@@ -164,7 +165,7 @@ class ConsensusModule:
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
                 tmp = pickle.dumps(msg)
                 self.last_append[follower] = round(time.time(), 2)
-                print(f'Sending AppendRPC to {follower} | {len(entries)} entries | prev_index: {lli} | prev_term: {llt}')
+                print(f'{c.VIOLET}Sending{c.ENDC} AppendRPC to {follower} | {len(entries)} entries | prev_index: {lli} | prev_term: {llt}')
                 send_message(self.connections, follower, tmp)
                 tmp_f.append(follower)
         
@@ -173,7 +174,7 @@ class ConsensusModule:
             self.write_state_to_disk()
 
     def handle_append_rpc(self, message):
-        print(f'{message.l_id}: AppendRPC | term: {message.term} | entries: {len(message.entries)}')
+        print(f'{c.VIOLET}{message.l_id}: AppendRPC{c.ENDC} | term: {message.term} | entries: {len(message.entries)}')
         if not len(message.entries) == 0:
             last_added_index = message.entries[-1].index
         else:
@@ -190,7 +191,7 @@ class ConsensusModule:
             self.voted_for = ""
         if self.role == RaftConsts.LEADER or self.role == RaftConsts.CANDIDATE:
             self.role = RaftConsts.FOLLOWER
-            print("I AM FOLLOWER NOW")
+            print(f'{c.BLUE}Stepping down to follower.{c.ENDC}')
         self.election_timer.reset()
         self.reset_pbar()
         term_t = self.log.get_term_at_index(message.lli)
@@ -200,7 +201,7 @@ class ConsensusModule:
             response = Message(m_type=RaftConsts.RESULT, term=self.term, lli=last_added_index, ok=False, sender=self.id)
             tmp = pickle.dumps(response)
             send_message(self.connections, message.l_id, tmp)
-            print(f'Previous term and index do not match, rejected AppendRPC')
+            print(f'Previous term and index do not match: {c.ERROR}rejected AppendRPC{c.ENDC}')
             return
 
         self.log.handle_incoming_entries(message.entries, message.lli, message.comm_idx)
@@ -213,25 +214,25 @@ class ConsensusModule:
     def handle_append_response(self, message):
         if self.role == RaftConsts.LEADER and message.term <= self.term:
             if message.ok == False:
-                print(f'{message.sender}: NACK | index: {message.lli} | term: {message.term}')
+                print(f'{c.VIOLET}{message.sender}{c.ENDC}: {c.ERROR}NACK{c.ENDC} | index: {message.lli} | term: {message.term}')
                 self.next_index[message.sender] = self.next_index[message.sender] - 1
                 self.send_append_rpc(clients=[message.sender])
             else:
                 if not message.lli == 0:
-                    print(f'{message.sender}: ACK | index: {message.lli} | term: {message.term}')
+                    print(f'{c.VIOLET}{message.sender}{c.ENDC}: {c.GREEN}ACK{c.ENDC} | index: {message.lli} | term: {message.term}')
                     self.replies_for_append[message.lli].add(message.sender)
                     # commit log(s)
                     if len(self.replies_for_append[message.lli]) >= self.quorum and message.lli > self.commit_index:
-                        print(f'Committing log index {message.lli}')
+                        print(f'{c.GREEN}Committing log index {message.lli}{c.ENDC}')
                         self.commit_index = message.lli
                         self.log.commit_index = self.commit_index
                     self.next_index[message.sender] = message.lli + 1
         elif self.role == RaftConsts.LEADER and message.term > self.term:
-            print(f'{message.sender}: NACK | index: {message.lli} | term: {message.term}')
+            print(f'{c.VIOLET}{message.sender}{c.ENDC}: {c.ERROR}NACK{c.ENDC} | index: {message.lli} | term: {message.term}')
             self.term = message.term
             self.voted_for = ""
             self.role = RaftConsts.FOLLOWER
-            print("I AM FOLLOWER NOW")
+            print(f'{c.BLUE}Stepping down to follower.{c.ENDC}')
             self.election_timer.reset()
             self.reset_pbar()
         self.write_state_to_disk()
@@ -311,7 +312,7 @@ class StateMachine:
                 num_entries = self.log.num_entries()
                 while self.last_committed < num_entries and self.last_committed < self.log.commit_index:
                     self.last_committed = self.last_committed + 1
-                    print(f'Executing entry at index {self.last_committed}')
+                    print(f'{c.VIOLET}Executing entry at index {self.last_committed}{c.ENDC}')
                     entry = self.log.get_entry_at_index(self.last_committed)
                     if entry.op_t == LogConsts.CREATE:
                         self.handle_create(entry)
@@ -331,7 +332,7 @@ class StateMachine:
             private_keys_dict = pickle.loads(entry.pri_keys)
             encrypted_pvt_key = get_decrypted_message(self.private_key, private_keys_dict[self.id])
             self.dict_keys[new_id][Consts.PRIVATE] = convert_bytes_to_private_key(encrypted_pvt_key+entry.rem_pri_key)
-            print(f'Created new dictionary with id {new_id}')
+            print(f'{c.VIOLET}Created new dictionary with id {new_id}{c.ENDC}')
     
     def handle_put(self, entry):
         if entry.dict_id in self.parent_dict.keys():
@@ -340,7 +341,7 @@ class StateMachine:
                 key = key_val[0]
                 val = key_val[1]
                 self.parent_dict[entry.dict_id][key] = val
-                print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
+                print(f'{c.VIOLET}Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}{c.ENDC}')
     
     def handle_get(self, entry):
         if entry.dict_id in self.parent_dict.keys():
@@ -348,4 +349,4 @@ class StateMachine:
                 key = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.key))
                 val = self.parent_dict[entry.dict_id][key]
                 if self.id == entry.issuer:
-                    print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')
+                    print(f'Value for key {c.SELECTED}{key}{c.ENDC} in dictionary {c.SELECTED}{entry.dict_id}{c.ENDC} : {c.SELECTED}{val}{c.ENDC}')

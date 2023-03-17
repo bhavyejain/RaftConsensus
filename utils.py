@@ -1,5 +1,3 @@
-
-
 from enum import Enum
 import config
 import pickle
