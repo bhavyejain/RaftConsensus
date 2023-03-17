@@ -14,11 +14,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
+        self.id = client_name
+        random.seed(int(client_name.split('_')[1])*60)
         self.role = RaftConsts.FOLLOWER
         self.timeout = random.randint((config.DEF_DELAY*3 + 1), (config.DEF_DELAY*6)) # 3T+1 < timeout < 5T
         print(f'Setting up consensus module with timeout {self.timeout} seconds')
         self.voted_for = ""
-        self.id = client_name
         self.term = 0
         self.election_timer = ElectionTimer(self.timeout, self.start_new_election)
         self.log = log
@@ -27,9 +28,11 @@ class ConsensusModule:
         self.commit_index = 0
         self.quorum = int(len(config.CLIENT_PORTS)/2) + 1
         self.next_index = {}
+        self.last_append = {}
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = 0
+                self.last_append[client] = 0
         self.replies_for_append = {}
         self.pbar = tqdm(total=(self.timeout), desc="Timeout:", ncols=50, colour='CYAN', bar_format='{l_bar}{bar}|')
         print()
@@ -70,13 +73,18 @@ class ConsensusModule:
 
     def heartbeat(self):
         while self.role == RaftConsts.LEADER:
-            print(f'Sending heartbeat <3 ...')
-            # llt, lli = self.log.get_last_term_idx()
-            # heartbeat = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=[],comm_idx=self.commit_index)
-            # tmp = pickle.dumps(heartbeat)
-            # broadcast(connections=self.connections, message=tmp)
-            self.send_append_rpc()
-            time.sleep(config.DEF_DELAY * 2.5)
+            # print(f'Sending heartbeat <3 ...')
+            # self.send_append_rpc()
+            # time.sleep(config.DEF_DELAY * 2.5)
+            curr_time = round(time.time(), 2)
+            clients = []
+            for client, last in self.last_append.items():
+                if (curr_time - last) > (config.DEF_DELAY * 2):
+                    clients.append(client)
+            if len(clients) > 0:
+                print(f'Sending heartbeat <3 to {", ".join(clients)}...')
+                self.send_append_rpc(clients=clients)
+            time.sleep(0.25)
 
     def become_leader(self):
         print("I AM LEADER NOW!")
@@ -87,6 +95,7 @@ class ConsensusModule:
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = lli + 1
+                self.last_append[client] = 0
         self.replies_for_append.clear()
         self.election_timer.cancel()
         self.write_state_to_disk()
@@ -134,10 +143,10 @@ class ConsensusModule:
                 self.become_leader()
         self.write_state_to_disk()
 
-    def send_append_rpc(self, client=None):
+    def send_append_rpc(self, clients=None):
         tmp_f = []
         for follower, next_idx in self.next_index.items():
-            if client == None or client == follower:
+            if (len(clients) == 0) or (follower in clients):
                 entries = self.log.get_entries_from_index(next_idx)
                 if not (len(entries) == 0):
                     if entries[-1].index in self.replies_for_append.keys():
@@ -146,11 +155,13 @@ class ConsensusModule:
                 llt = self.log.get_term_at_index(lli)
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
                 tmp = pickle.dumps(msg)
+                self.last_append[follower] = round(time.time(), 2)
                 send_message(self.connections, follower, tmp)
                 tmp_f.append(follower)
         
-        print(f'Sending AppendRPC to {", ".join(tmp_f)} with {len(entries)} entries')
-        self.write_state_to_disk()
+        if len(tmp_f) > 0:
+            print(f'Sending AppendRPC to {", ".join(tmp_f)} with {len(entries)} entries')
+            self.write_state_to_disk()
 
     def handle_append_rpc(self, message):
         print(f'Processing incoming AppendRPC for term {message.term} from leader {message.l_id} with {len(message.entries)} entries')
@@ -193,7 +204,7 @@ class ConsensusModule:
             if message.ok == False:
                 print("Received NACK")
                 self.next_index[message.sender] = self.next_index[message.sender] - 1
-                self.send_append_rpc(client=message.sender)
+                self.send_append_rpc(clients=[message.sender])
             else:
                 if not message.lli == 0:
                     print(f'Adding response for index {message.lli}')
