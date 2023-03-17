@@ -7,14 +7,11 @@ import config
 import threading
 import sys
 import shutil
-from freeports import free_ports
 from utils import Colors as c
 
 subprocess.call(['chmod', '+x', 'startup.sh'])
 
 pwd = os.getcwd()
-
-free_ports(list(config.CLIENT_PORTS.values()))
 
 if os.path.exists(config.FILES_PATH):
     # os.rmdir(config.FILES_PATH)
@@ -52,6 +49,7 @@ def execute_command(seg_cmd):
     elif op_type == "wait":
         input(f"Press {c.BLINK}ENTER{c.ENDC} to continue simulation...")
 
+    # create <leader_client> <member 1> <member 2> ...
     elif op_type == "create":
         client = seg_cmd[1]
         cmd = "CREATE"
@@ -59,39 +57,52 @@ def execute_command(seg_cmd):
             cmd = cmd + " " + member
         connections[client].sendall(bytes(cmd, "utf-8"))
     
+    # put <leader_client> <key> <value>
     elif op_type == "put":
         client = seg_cmd[1]
         cmd = f'PUT {seg_cmd[2]} {seg_cmd[3]} {seg_cmd[4]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
     
+    # get <leader_client> <key>
     elif op_type == "get":
         client = seg_cmd[1]
         cmd = f'GET {seg_cmd[2]} {seg_cmd[3]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
     
+    # printdict <leader_client> <dict_id>
     elif op_type == "printdict":
         client = seg_cmd[1]
         cmd = f'PRINTDICT {seg_cmd[2]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
     
+    # printall <leader_client>
     elif op_type == "printall":
         client = seg_cmd[1]
         cmd = f'PRINTALL'
         connections[client].sendall(bytes(cmd, "utf-8"))
 
+    # faillink <client1> <client2>
     elif op_type == "faillink":
         client = seg_cmd[1]
         cmd = f'FAILLINK {seg_cmd[2]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
 
+    # fixlink <client1> <client2>
     elif op_type == "fixlink":
         client = seg_cmd[1]
         cmd = f'FIXLINK {seg_cmd[2]}'
         connections[client].sendall(bytes(cmd, "utf-8"))
 
-    elif op_type == "printall":
+    # fail <client>
+    elif op_type == "fail":
         client = seg_cmd[1]
         cmd = f'FAILPROCESS'
+        connections[client].sendall(bytes(cmd, "utf-8"))
+    
+    # fix <client>
+    elif op_type == "fix":
+        client = seg_cmd[1]
+        cmd = f'FIXPROCESS'
         connections[client].sendall(bytes(cmd, "utf-8"))
 
     elif op_type == "start":

@@ -25,6 +25,7 @@ counter = 0
 consensus_module = ...
 failed_links = list()
 is_failed = False
+private_key = ...
 
 message_queue_lock = Lock()
 
@@ -124,7 +125,6 @@ def handle_cli(client, client_id):
                         tmp = tmp + f'{key}\n'
                     print(tmp)
                 elif message == "START":
-                    print("Starting consensus module...")
                     consensus_module.start_module(parent_dict=parent_dict)
             else:
                 print(f'handle_cli# Closing connection to {client_id}')
@@ -143,6 +143,7 @@ def process_messages():
         delta2 = round((config.DEF_DELAY - delta1), 2) if delta1 < config.DEF_DELAY else 0
         time.sleep(delta2)
         message = msg[1]
+
         # NODE_FAIL_HANDLING
         if is_failed or message.c_id in failed_links:
             print(f'Not processing the message from {message.c_id} due to failed link')
@@ -151,7 +152,8 @@ def process_messages():
         consensus_module.handle_message(message)
 
 def receive():
-    global consensus_module, parent_dict, static_connections
+    global consensus_module, parent_dict, private_key, static_connections
+
     while len(connections) < (len(config.CLIENT_PORTS) - 1):
         # Accept Connection
         client, _ = mySocket.accept()
@@ -237,7 +239,7 @@ if __name__ == "__main__":
     connect_running_clients()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as mySocket:
-        mySocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR)
+        mySocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         mySocket.bind((config.HOST, config.CLIENT_PORTS[client_name]))
         mySocket.listen(5)
 
