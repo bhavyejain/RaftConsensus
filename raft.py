@@ -134,6 +134,7 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def send_append_rpc(self, client=None):
+        tmp = []
         for follower, next_idx in self.next_index.items():
             if client == None or client == follower:
                 entries = self.log.get_entries_from_index(next_idx)
@@ -145,7 +146,9 @@ class ConsensusModule:
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
                 tmp = pickle.dumps(msg)
                 send_message(self.connections, follower, tmp)
-                print(f'Sending AppendRPC to {follower} with {len(entries)} entries')
+                tmp.append(follower)
+        
+        print(f'Sending AppendRPC to {", ".join(tmp)} with {len(entries)} entries')
         self.write_state_to_disk()
 
     def handle_append_rpc(self, message):

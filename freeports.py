@@ -17,6 +17,8 @@ def get_pids(port):
 def free_ports(ports):
     for port in ports:
         pids = set(get_pids(port))
+        print(f'pids on port {port}: {pids}')
         for pid in pids:
+            print(f'Killing process {pid} on port {port}')
             command = f'sudo kill -9 {str(pid)}'
             os.system(command)
