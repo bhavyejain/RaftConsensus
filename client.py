@@ -33,7 +33,7 @@ private_key = ...
 message_queue_lock = Lock()
 
 def handle_client(client, client_id):
-    global message_queue, message_queue_lock, private_key
+    global message_queue, message_queue_lock
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -44,8 +44,9 @@ def handle_client(client, client_id):
                     if is_failed or client_id in failed_links:
                         print("Either node failed or link failed to {}".format(client_id))
                         continue
-                    decrypted_message = get_decrypted_message(private_key, raw_message)
-                    message = pickle.loads(decrypted_message)
+                    # decrypted_message = get_decrypted_message(private_key, raw_message)
+                    # message = pickle.loads(decrypted_message)
+                    message = pickle.loads(raw_message)
                     # print(f'Queueing message from {client_id}')
                     with message_queue_lock:
                         message_queue.put((round(time.time(), 2), message))
@@ -182,7 +183,7 @@ def receive():
         thread = threading.Thread(target=target, args=(client, client_id, ))
         thread.start()
     
-    private_key , public_key = generate_encryption_keys()
+    private_key, public_key = generate_encryption_keys()
     save_public_key(public_key, client_name)
 
     print("Setting up consensus module...")

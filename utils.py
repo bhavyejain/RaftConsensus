@@ -115,18 +115,20 @@ def get_decrypted_message(private_key, message):
 
 def broadcast(connections, message):
     for client_name, connection in connections.items():
-        public_key = get_public_key(client_name)
-        # message is bytes anyways
-        encrypted_message = get_encrypted_message(public_key, message)
-        connection.sendall(encrypted_message)
+        # public_key = get_public_key(client_name)
+        # # message is bytes anyways
+        # encrypted_message = get_encrypted_message(public_key, message)
+        # connection.sendall(encrypted_message)
+        connection.sendall(message)
 
 def send_message(connections, id, message):
     # NODE_FAIL_HANDLING
     if id in connections:
-        public_key = get_public_key(id)
-        # message is bytes anyways
-        encrypted_message = get_encrypted_message(public_key, message)
-        connections[id].sendall(encrypted_message)
+        # public_key = get_public_key(id)
+        # # message is bytes anyways
+        # encrypted_message = get_encrypted_message(public_key, message)
+        # connections[id].sendall(encrypted_message)
+        connections[id].sendall(message)
 
 def get_pid(client_name):
     return int(client_name.split('_')[1])
@@ -136,7 +138,7 @@ CLIENT_COUNT = len(config.CLIENT_PORTS)
 def prepare_create_entry(term, id, counter, members):
     dict_id = f'{id}_{counter}'
     private_key, public_key = generate_encryption_keys(1024)
-    save_public_key(public_key, dict_id)
+    # save_public_key(public_key, dict_id)
     private_key_set = dict()
     for member in members:
         mem_pub_key = get_public_key(member)
