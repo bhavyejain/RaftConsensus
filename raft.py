@@ -34,7 +34,7 @@ class ConsensusModule:
                 self.next_index[client] = 0
                 self.last_append[client] = 0
         self.replies_for_append = {}
-        self.pbar = tqdm(total=(self.timeout), desc="Timeout:", ncols=50, colour='CYAN', bar_format='{l_bar}{bar}|')
+        self.pbar = tqdm(total=(self.timeout), desc="Timeout:", colour='CYAN', bar_format='{l_bar}{bar}|')
         print()
 
     def update_pbar(self):

@@ -22,6 +22,7 @@ message_queue = Queue()
 parent_dict = dict()
 counter = 0
 consensus_module = ...
+private_key = ...
 
 message_queue_lock = Lock()
 
@@ -98,7 +99,6 @@ def handle_cli(client, client_id):
                         tmp = tmp + f'{key}\n'
                     print(tmp)
                 elif message == "START":
-                    print("Starting consensus module...")
                     consensus_module.start_module(parent_dict=parent_dict)
             else:
                 print(f'handle_cli# Closing connection to {client_id}')
@@ -117,11 +117,10 @@ def process_messages():
         delta2 = round((config.DEF_DELAY - delta1), 2) if delta1 < config.DEF_DELAY else 0
         time.sleep(delta2)
         message = msg[1]
-        # print(f'processing message of type {message.m_type.value}')
         consensus_module.handle_message(message)
 
 def receive():
-    global consensus_module, parent_dict
+    global consensus_module, parent_dict, private_key
     while len(connections) < (len(config.CLIENT_PORTS) - 1):
         # Accept Connection
         client, _ = mySocket.accept()

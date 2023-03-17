@@ -53,6 +53,7 @@ class Message:
 def broadcast(connections, message):
     for _, connection in connections.items():
         connection.sendall(message)
+        # bytes(encrypted_msg, "utf-8")
 
 def send_message(connections, id, message):
     connections[id].sendall(message)
