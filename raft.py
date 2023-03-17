@@ -27,6 +27,7 @@ class ConsensusModule:
         self.commit_index = 0
         self.quorum = int(len(config.CLIENT_PORTS)/2) + 1
         self.next_index = {}
+        self.state_machine = None
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = 0
@@ -49,8 +50,8 @@ class ConsensusModule:
         pbar_thread = threading.Thread(target=self.update_pbar, args=())
         pbar_thread.start()
 
-        state_machine = StateMachine(self.id, self.log, parent_dict)
-        state_machine_thread = threading.Thread(target=state_machine.advance_state_machine, args=())
+        self.state_machine = StateMachine(self.id, self.log, parent_dict)
+        state_machine_thread = threading.Thread(target=self.state_machine.advance_state_machine, args=())
         state_machine_thread.start()
 
     def start_new_election(self):
@@ -234,6 +235,25 @@ class ConsensusModule:
             term_ = state.readline().strip()
             self.term = int(term_)
             self.voted_for = state.readline()
+    
+    def go_to_fail_state(self):
+        # NODE_FAIL_HANDLING
+        self.election_timer.cancel()
+        self.next_index = dict()
+        # TODO : Check voted_for and votes
+        self.voted_for = ""
+        self.term = 0
+        self.log.clear()
+        self.votes = 0
+        self.commit_index = 0
+    
+    def restore_node(self):
+        # NODE_FAIL_HANDLING
+        self.read_state_from_disk()
+        self.log.read_logs_from_disk()
+        if self.state_machine is not None:
+            self.state_machine.reset_state_machine()
+        self.election_timer.restart()
 
 class StateMachine:
     def __init__(self, client_name, log, parent_dict):
