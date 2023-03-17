@@ -24,7 +24,7 @@ class _TimerReset(Thread):
         self.running = True
 
     def cancel(self):
-        """Stop the timer if it hasn't finished yet"""
+        self.running = False
         self.finished.set()
 
     def run(self):
