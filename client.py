@@ -8,7 +8,9 @@ from threading import Lock
 from utils import Colors as c
 from queue import PriorityQueue, Queue
 import pickle
-from utils import Consts, RaftConsts, Message, get_decrypted_message, generate_encryption_keys, save_public_key, convert_bytes_to_private_key, convert_bytes_to_public_key
+from utils import Consts, RaftConsts, Message
+from utils import generate_encryption_keys, save_public_key, save_private_key, get_public_key, get_private_key
+from utils import get_decrypted_message, convert_bytes_to_private_key, convert_bytes_to_public_key
 from raft import ConsensusModule, StateMachine
 from log import Log, LogConsts
 from cryptography.hazmat.backends import default_backend
@@ -135,6 +137,8 @@ def handle_cli(client, client_id):
                     print("I CRASHED!")
                     # NODE_FAIL_HANDLING
                     is_failed = True
+                    for _, connection in connections.items():
+                        connection.close()
                     connections = dict()
                     with message_queue_lock:
                         message_queue = Queue()
@@ -178,10 +182,8 @@ def process_messages():
         # print(f'processing message of type {message.m_type.value}')
         consensus_module.handle_message(message)
 
-def receive():
-    global consensus_module, parent_dict, private_key, static_connections
-
-    while len(connections) < (len(config.CLIENT_PORTS) - 1):
+def receive(max_conn):
+    while len(connections) < max_conn:
         # Accept Connection
         client, _ = mySocket.accept()
         client.setblocking(True)
@@ -196,61 +198,46 @@ def receive():
         
         thread = threading.Thread(target=target, args=(client, client_id, ))
         thread.start()
-    
-    private_key, public_key = generate_encryption_keys()
-    save_public_key(public_key, client_name)
 
-    print("Setting up consensus module...")
-    # NODE_FAIL_HANDLING
-    static_connections = connections.copy()
-    consensus_module = ConsensusModule(client_name=client_name, log=local_log, connections=connections)
-    print(f'================= STARTUP COMPLETE =================')
-
-    while True:
-        client, _ = mySocket.accept()
-        client.setblocking(True)
-        client_id = client.recv(config.BUFF_SIZE).decode()
-        if client_id == "CLI":
-            print(f"receive# Connecting with {client_id}...")
-            thread = threading.Thread(target=handle_cli, args=(client, client_id, ))
-            thread.start()
-
-def connect_running_clients():
-    for n in range(1, pid):
+def connect_running_clients(till):
+    for n in range(1, till):
         client_tc = f'c_{n}'
-        print(f'startup# Connecting to {client_tc}...')
-        try:
-            connections[client_tc] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            connections[client_tc].connect((config.HOST, config.CLIENT_PORTS[client_tc]))
-            connections[client_tc].setblocking(True)
-            connections[client_tc].sendall(bytes(client_name, "utf-8"))
-            print(f"startup# {connections[client_tc].recv(config.BUFF_SIZE).decode()}")
-            thread = threading.Thread(target=handle_client, args=(connections[client_tc], client_tc,))
-            thread.start()
-        except:
-            connections.pop(client_tc)
-            print(f'{c.ERROR}startup# Failed to connect to {client_tc}!{c.ENDC}')
+        if not client_name == client_tc:
+            print(f'startup# Connecting to {client_tc}...')
+            try:
+                connections[client_tc] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                connections[client_tc].connect((config.HOST, config.CLIENT_PORTS[client_tc]))
+                connections[client_tc].setblocking(True)
+                connections[client_tc].sendall(bytes(client_name, "utf-8"))
+                print(f"startup# {connections[client_tc].recv(config.BUFF_SIZE).decode()}")
+                thread = threading.Thread(target=handle_client, args=(connections[client_tc], client_tc,))
+                thread.start()
+            except:
+                connections.pop(client_tc)
+                print(f'{c.ERROR}startup# Failed to connect to {client_tc}!{c.ENDC}')
 
 if __name__ == "__main__":
-    global local_log, state_machine
+    global local_log, state_machine, revive
     
     print(f'================= BEGIN STARTUP =================')
     client_name = sys.argv[1]   # c_n
     pid = config.CLIENT_ID_MAP[client_name]
 
+    revive = bool(int(sys.argv[2]))
+
     local_log = Log(client_name)
-    # state_machine = StateMachine(client_name, local_log, parent_dict)
 
     print(f'startup# Setting up Client {client_name}...')
 
     message_queue_thread = threading.Thread(target=process_messages, args=())
     message_queue_thread.start()
 
-    print("Starting up state machine...")
-    # state_machine_thread = threading.Thread(target=state_machine.advance_state_machine, args=())
-    # state_machine_thread.start()
+    if revive:
+        till = len(config.CLIENT_PORTS) + 1
+    else:
+        till = pid
 
-    # connect to clients that have started up
+    # connect to clients that are running
     connect_running_clients()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as mySocket:
@@ -260,4 +247,20 @@ if __name__ == "__main__":
 
         print('Listening for new connections...')
 
-        receive()
+        if not revive:
+            receive((len(config.CLIENT_PORTS) - 1))
+
+            private_key, public_key = generate_encryption_keys()
+            save_public_key(public_key, client_name)
+            save_private_key(private_key, client_name)
+        else:
+            public_key = get_public_key(client_name)
+            private_key = get_private_key(client_name)
+
+        print("Setting up consensus module...")
+        # NODE_FAIL_HANDLING
+        static_connections = connections.copy()
+        consensus_module = ConsensusModule(client_name=client_name, log=local_log, connections=connections)
+        print(f'================= STARTUP COMPLETE =================')
+
+        receive(len(config.CLIENT_PORTS)*2)

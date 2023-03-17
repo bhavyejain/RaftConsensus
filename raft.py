@@ -61,6 +61,7 @@ class ConsensusModule:
         pbar_thread = threading.Thread(target=self.update_pbar, args=())
         pbar_thread.start()
 
+        print("Starting up state machine...")
         self.state_machine = StateMachine(self.id, self.log, parent_dict, dict_keys, private_key)
         state_machine_thread = threading.Thread(target=self.state_machine.advance_state_machine, args=())
         state_machine_thread.start()

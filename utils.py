@@ -66,6 +66,10 @@ def get_encrypted_key_path(id):
     path = f'{config.FILES_PATH}/{id}_key.pem'
     return path
 
+def get_private_encrypted_key_path(id):
+    path = f'{config.FILES_PATH}/{id}_private_key.pem'
+    return path
+
 def generate_encryption_keys(key_size=1024):
     private_key = rsa.generate_private_key(
         public_exponent=65537,
@@ -85,6 +89,17 @@ def save_public_key(public_key, id):
     with open(path, 'wb') as f:
         f.write(pem)
 
+def save_private_key(private_key, id):
+    # write public key to disk and make available to all
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    path = get_private_encrypted_key_path(id)
+    with open(path, 'wb') as f:
+        f.write(pem)
+
 def get_public_key(client_name):
     with open(get_encrypted_key_path(client_name), 'rb') as key_file:
         public_key = serialization.load_pem_public_key(
@@ -92,6 +107,15 @@ def get_public_key(client_name):
             backend=default_backend()
         )
         return public_key
+
+def get_private_key(client_name):
+    with open(get_private_encrypted_key_path(client_name), 'rb') as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend()
+        )
+        return private_key
 
 def get_encrypted_message(public_key, message):
     encrypted_message = public_key.encrypt(
