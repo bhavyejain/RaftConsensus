@@ -21,6 +21,7 @@ client_name = ""
 pid = 0
 message_queue = Queue()
 parent_dict = dict()
+parent_dict["members"] = dict()
 counter = 0
 consensus_module = ...
 failed_links = list()
@@ -57,12 +58,13 @@ def handle_client(client, client_id):
 
 def add_to_log(entry):
     global local_log, consensus_module
-    local_log.append_log(entry)
-    consensus_module.update_next_index()
-    consensus_module.send_append_rpc()
+    with consensus_module.sending_rpc:
+        local_log.append_log(entry)
+        # consensus_module.update_next_index()
+        consensus_module.send_append_rpc()
 
 def handle_cli(client, client_id):
-    global local_log, parent_dict, consensus_module, is_failed, static_connections, message_queue
+    global local_log, parent_dict, consensus_module, is_failed, static_connections, message_queue, counter
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -74,15 +76,16 @@ def handle_cli(client, client_id):
                     continue
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
-                    entry = utils.prepare_create_entry(consensus_module.term, client_name, counter, member_clients)
+                    entry = utils.prepare_create_entry(client_name, counter, member_clients, consensus_module.term)
+                    counter = counter + 1
                     add_to_log(entry)
                 elif message.startswith("PUT"):
                     comp = message.split()
-                    entry = utils.prepare_put_entry(consensus_module.term, comp[1], client_name, (comp[2], comp[3]))
+                    entry = utils.prepare_put_entry(comp[1], client_name, (comp[2], comp[3]), consensus_module.term)
                     add_to_log(entry)
                 elif message.startswith("GET"):
                     comp = message.split()
-                    entry = utils.prepare_put_entry(consensus_module.term, comp[1], client_name, comp[2])
+                    entry = utils.prepare_get_entry(comp[1], client_name, comp[2], consensus_module.term)
                     add_to_log(entry)
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()
@@ -122,7 +125,8 @@ def handle_cli(client, client_id):
                 elif message == "PRINTALL":
                     tmp = f'Dictionary IDs with {client_name} as member:\n'
                     for key in parent_dict.keys():
-                        tmp = tmp + f'{key}\n'
+                        if not key == "members":
+                            tmp = tmp + f'{key}\n'
                     print(tmp)
                 elif message == "START":
                     consensus_module.start_module(parent_dict=parent_dict)

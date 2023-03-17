@@ -57,7 +57,7 @@ def execute_command(seg_cmd):
             cmd = cmd + " " + member
         connections[client].sendall(bytes(cmd, "utf-8"))
     
-    # put <leader_client> <key> <value>
+    # put <leader_client> <dict_id> <key> <value>
     elif op_type == "put":
         client = seg_cmd[1]
         cmd = f'PUT {seg_cmd[2]} {seg_cmd[3]} {seg_cmd[4]}'

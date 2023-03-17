@@ -8,7 +8,7 @@ class LogConsts(Enum):
     GET = "GET"
 
 class LogEntry:
-    def __init__(self, term, op_t, dict_id, index=None, members=None, pub_key=None, pri_keys=None, issuer=None, key=None, keyval=None):
+    def __init__(self, op_t, dict_id, term=None, index=None, members=None, pub_key=None, pri_keys=None, issuer=None, key=None, keyval=None):
         self.term = term
         self.index = index
         self.op_t = op_t    # operation type
@@ -105,8 +105,8 @@ class Log:
             for entry in entries:
                 self.log.append(entry)
 
-        self.write_logs_to_disk()
         self.commit_index = comm_idx
+        self.write_logs_to_disk()
     
     def clear(self):
         self.log.clear()
