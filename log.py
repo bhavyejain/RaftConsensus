@@ -107,3 +107,7 @@ class Log:
 
         self.write_logs_to_disk()
         self.commit_index = comm_idx
+    
+    def clear(self):
+        self.log.clear()
+        self.commit_index = 0

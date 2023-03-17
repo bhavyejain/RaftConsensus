@@ -56,7 +56,9 @@ def broadcast(connections, message):
         # bytes(encrypted_msg, "utf-8")
 
 def send_message(connections, id, message):
-    connections[id].sendall(message)
+    # NODE_FAIL_HANDLING
+    if id in connections:
+        connections[id].sendall(message)
 
 def get_pid(client_name):
     return int(client_name.split('_')[1])
