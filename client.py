@@ -238,7 +238,7 @@ if __name__ == "__main__":
         till = pid
 
     # connect to clients that are running
-    connect_running_clients()
+    connect_running_clients(till)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as mySocket:
         mySocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
