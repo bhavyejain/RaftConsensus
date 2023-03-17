@@ -9,8 +9,7 @@ import pickle
 import time
 import threading
 from tqdm import tqdm
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
+from threading import Lock
 
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
@@ -144,7 +143,6 @@ class ConsensusModule:
             if self.votes >= self.quorum:
                 self.become_leader()
         self.write_state_to_disk()
-
     def send_append_rpc(self, clients=None):
         tmp_f = []
         for follower, next_idx in self.next_index.items():
@@ -164,7 +162,6 @@ class ConsensusModule:
         if len(tmp_f) > 0:
             print(f'Sending AppendRPC to {", ".join(tmp_f)} with {len(entries)} entries')
             self.write_state_to_disk()
-
     def handle_append_rpc(self, message):
         print(f'Processing incoming AppendRPC for term {message.term} from leader {message.l_id} with {len(message.entries)} entries')
         if message.term < self.term:
@@ -177,7 +174,6 @@ class ConsensusModule:
             print("I AM FOLLOWER NOW")
         self.election_timer.reset()
         self.reset_pbar()
-
         term_t = self.log.get_term_at_index(message.lli)
         if not term_t == message.llt:
             response = Message(m_type=RaftConsts.RESULT, term=self.term, ok=False, sender=self.id)
@@ -185,19 +181,15 @@ class ConsensusModule:
             send_message(self.connections, message.l_id, tmp)
             print(f'Previous term and index do not match, rejected AppendRPC')
             return
-
         self.log.handle_incoming_entries(message.entries, message.lli, message.comm_idx)
         self.commit_index = message.comm_idx
-
         if not len(message.entries) == 0:
             last_added_index = message.entries[-1].index
         else:
             last_added_index = 0
-
         response = Message(m_type=RaftConsts.RESULT, term=self.term, lli=last_added_index, ok=True, sender=self.id)
         tmp = pickle.dumps(response)
         send_message(self.connections, message.l_id, tmp)
-
         self.write_state_to_disk()
 
     def handle_append_response(self, message):
@@ -224,7 +216,6 @@ class ConsensusModule:
             print("I AM FOLLOWER NOW")
             self.election_timer.reset()
             self.reset_pbar()
-
         self.write_state_to_disk()
 
     # send message to the designated handler
@@ -312,6 +303,7 @@ class StateMachine:
         self.dict_keys[new_id][Consts.PUBLIC] = convert_bytes_to_public_key(entry.pub_key)
         if self.id in entry.members:
             self.parent_dict[new_id] = dict()
+            self.parent_dict["members"][new_id] = entry.members
             private_keys_dict = pickle.loads(entry.pri_keys)
             encrypted_pvt_key = get_decrypted_message(self.private_key, private_keys_dict[self.id])
             self.dict_keys[new_id][Consts.PRIVATE] = convert_bytes_to_private_key(encrypted_pvt_key+entry.rem_pri_key)
@@ -319,14 +311,17 @@ class StateMachine:
     
     def handle_put(self, entry):
         if entry.dict_id in self.parent_dict.keys():
-            key_val = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.keyval))
-            key = key_val[0]
-            val = key_val[1]
-            self.parent_dict[entry.dict_id][key] = val
-            print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
+            if entry.issuer in self.parent_dict["members"][entry.dict_id]:
+                key_val = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.keyval))
+                key = key_val[0]
+                val = key_val[1]
+                self.parent_dict[entry.dict_id][key] = val
+                print(f'Inserted key-value pair ({key}, {val}) in dictionary {entry.dict_id}')
     
     def handle_get(self, entry):
         if entry.dict_id in self.parent_dict.keys():
-            key = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.key))
-            val = self.parent_dict[entry.dict_id][key]
-            print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')
+            if entry.issuer in self.parent_dict["members"][entry.dict_id]:
+                key = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.key))
+                val = self.parent_dict[entry.dict_id][key]
+                if self.id == entry.issuer:
+                    print(f'Value for key {key} in dictionary {entry.dict_id} : {val}')

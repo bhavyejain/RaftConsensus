@@ -79,7 +79,8 @@ def handle_cli(client, client_id):
                     continue
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
-                    entry = utils.prepare_create_entry(consensus_module.term, client_name, counter, member_clients)
+                    entry = utils.prepare_create_entry(client_name, consensus_module.counter, member_clients, consensus_module.term)
+                    consensus_module.update_counter()
                     dict_keys[entry.dict_id] = dict()
                     dict_keys[entry.dict_id][Consts.PUBLIC] = convert_bytes_to_public_key(entry.pub_key)
                     if client_name in member_clients:
@@ -91,12 +92,12 @@ def handle_cli(client, client_id):
                 elif message.startswith("PUT"):
                     comp = message.split()
                     dict_id = comp[1]
-                    entry = utils.prepare_put_entry(consensus_module.term, dict_id, client_name, (comp[2], comp[3]), dict_keys[dict_id][Consts.PUBLIC])
+                    entry = utils.prepare_put_entry(dict_id, client_name, (comp[2], comp[3]), dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
                     add_to_log(entry)
                 elif message.startswith("GET"):
                     comp = message.split()
                     dict_id = comp[1]
-                    entry = utils.prepare_put_entry(consensus_module.term, dict_id, client_name, comp[2], dict_keys[dict_id][Consts.PUBLIC])
+                    entry = utils.prepare_put_entry(dict_id, client_name, comp[2], dict_keys[dict_id][Consts.PUBLIC], consensus_module.term)
                     add_to_log(entry)
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()
