@@ -158,7 +158,7 @@ class ConsensusModule:
                 entries = self.log.get_entries_from_index(next_idx)
                 if not (len(entries) == 0):
                     if not (entries[-1].index in self.replies_for_append.keys()):
-                        self.replies_for_append[entries[-1].index] = set()
+                        self.replies_for_append[entries[-1].index] = set(self.id)
                 lli = next_idx - 1
                 llt = self.log.get_term_at_index(lli)
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
