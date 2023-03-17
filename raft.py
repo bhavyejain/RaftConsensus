@@ -77,9 +77,6 @@ class ConsensusModule:
 
     def heartbeat(self):
         while self.role == RaftConsts.LEADER:
-            # print(f'Sending heartbeat <3 ...')
-            # self.send_append_rpc()
-            # time.sleep(config.DEF_DELAY * 2.5)
             with self.sending_rpc:
                 curr_time = round(time.time(), 2)
                 clients = []

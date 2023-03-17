@@ -31,7 +31,7 @@ private_key = ...
 message_queue_lock = Lock()
 
 def handle_client(client, client_id):
-    global message_queue, message_queue_lock
+    global message_queue, message_queue_lock, consensus_module
     client.sendall(bytes(f'Client {client_name} connected', "utf-8"))
     while True:
         try:
@@ -43,9 +43,13 @@ def handle_client(client, client_id):
                         print("Either node failed or link failed to {}".format(client_id))
                         continue
                     message = pickle.loads(raw_message)
-                    # print(f'Queueing message from {client_id}')
-                    with message_queue_lock:
-                        message_queue.put((round(time.time(), 2), message))
+                    if message.m_type == RaftConsts.PASS and consensus_module.role == RaftConsts.LEADER:
+                        entry = message.entries[0]
+                        entry.term = consensus_module.term
+                        add_to_log(entry)
+                    elif not message.m_type == RaftConsts.PASS:
+                        with message_queue_lock:
+                            message_queue.put((round(time.time(), 2), message))
                 except pickle.UnpicklingError:
                     print(f'{raw_message.decode()}')
             else:
@@ -58,10 +62,14 @@ def handle_client(client, client_id):
 
 def add_to_log(entry):
     global local_log, consensus_module
-    with consensus_module.sending_rpc:
-        local_log.append_log(entry)
-        # consensus_module.update_next_index()
-        consensus_module.send_append_rpc()
+    if consensus_module.role == RaftConsts.LEADER:
+        with consensus_module.sending_rpc:
+            local_log.append_log(entry)
+            consensus_module.send_append_rpc()
+    else:
+        msg = Message(m_type=RaftConsts.PASS, entries=[entry])
+        tmp = pickle.dumps(msg)
+        utils.broadcast(connections=connections, message=tmp)
 
 def handle_cli(client, client_id):
     global local_log, parent_dict, consensus_module, is_failed, static_connections, message_queue, counter
