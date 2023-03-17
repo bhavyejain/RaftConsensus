@@ -35,7 +35,7 @@ class ConsensusModule:
         print()
 
     def update_pbar(self):
-        while True:
+        while self.election_timer.running:
             self.pbar.update(1)
             time.sleep(1)
 
@@ -70,8 +70,6 @@ class ConsensusModule:
 
     def heartbeat(self):
         while self.role == RaftConsts.LEADER:
-            self.election_timer.reset()
-            self.reset_pbar()
             print(f'Sending heartbeat <3 ...')
             # llt, lli = self.log.get_last_term_idx()
             # heartbeat = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=[],comm_idx=self.commit_index)
@@ -90,6 +88,7 @@ class ConsensusModule:
             if not client == self.id:
                 self.next_index[client] = lli + 1
         self.replies_for_append.clear()
+        self.election_timer.cancel()
         self.write_state_to_disk()
 
     def handle_vote_request(self, message):
@@ -124,6 +123,8 @@ class ConsensusModule:
         if message.term > self.term:
             print("I AM FOLLOWER NOW")
             self.role = RaftConsts.FOLLOWER
+            self.term = message.term
+            self.voted_for = ""
             self.election_timer.reset()
             self.reset_pbar()
         elif message.term == self.term and self.role == RaftConsts.CANDIDATE and message.ok == True:
@@ -188,20 +189,28 @@ class ConsensusModule:
 
     def handle_append_response(self, message):
         print(f'Processing incoming append response from {message.sender}')
-        if message.ok == False:
-            print("Received NACK")
-            self.next_index[message.sender] = self.next_index[message.sender] - 1
-            self.send_append_rpc(client=message.sender)
-        else:
-            if not message.lli == 0:
-                print(f'Adding response for index {message.lli}')
-                self.replies_for_append[message.lli].add(message.sender)
-                # commit log(s)
-                if len(self.replies_for_append[message.lli]) >= self.quorum and message.lli > self.commit_index:
-                    print(f'Committing log index {message.lli}')
-                    self.commit_index = message.lli
-                    self.log.commit_index = self.commit_index
-                self.next_index[message.sender] = message.lli + 1
+        if self.role == RaftConsts.LEADER and message.term <= self.term:
+            if message.ok == False:
+                print("Received NACK")
+                self.next_index[message.sender] = self.next_index[message.sender] - 1
+                self.send_append_rpc(client=message.sender)
+            else:
+                if not message.lli == 0:
+                    print(f'Adding response for index {message.lli}')
+                    self.replies_for_append[message.lli].add(message.sender)
+                    # commit log(s)
+                    if len(self.replies_for_append[message.lli]) >= self.quorum and message.lli > self.commit_index:
+                        print(f'Committing log index {message.lli}')
+                        self.commit_index = message.lli
+                        self.log.commit_index = self.commit_index
+                    self.next_index[message.sender] = message.lli + 1
+        elif self.role == RaftConsts.LEADER and message.term > self.term:
+            self.term = message.term
+            self.voted_for = ""
+            self.role = RaftConsts.FOLLOWER
+            print("I AM FOLLOWER NOW")
+            self.election_timer.reset()
+            self.reset_pbar()
 
         self.write_state_to_disk()
 

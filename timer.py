@@ -59,5 +59,6 @@ class _TimerReset(Thread):
             # print "Time: %s - timer resetting..." % time.asctime()
 
         self.resetted = True
+        self.running = True
         self.finished.set()
         self.finished.clear()
