@@ -298,15 +298,12 @@ class StateMachine:
                     self.last_committed = self.last_committed + 1
                     print(f'Executing entry at index {self.last_committed}')
                     entry = self.log.get_entry_at_index(self.last_committed)
-                    op = pickle.loads(get_decrypted_message(self.dict_keys[entry.dict_id][Consts.PRIVATE], entry.op_t))
-                    if op == LogConsts.CREATE:
+                    if entry.op_t == LogConsts.CREATE:
                         self.handle_create(entry)
-                    elif op == LogConsts.PUT:
+                    elif entry.op_t == LogConsts.PUT:
                         self.handle_put(entry)
-                    elif op == LogConsts.GET:
+                    elif entry.op_t == LogConsts.GET:
                         self.handle_get(entry)
-                    else:
-                        print("Decryption Failed i.e you dont have access - Check !!!")
             time.sleep(0.5) # check twice every second
 
     def handle_create(self, entry):

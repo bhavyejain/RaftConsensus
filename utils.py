@@ -143,20 +143,17 @@ def prepare_create_entry(term, id, counter, members):
     for member in members:
         mem_pub_key = get_public_key(member)
         private_key_set[member] = get_encrypted_message(mem_pub_key, private_key)
-    encrypted_op = get_encrypted_message(pickle.dumps(public_key, LogConsts.CREATE))
-    entry = LogEntry(term=term, op_t=encrypted_op, dict_id=dict_id,
+    entry = LogEntry(term=term, op_t=LogConsts.CREATE, dict_id=dict_id,
                      members=members, pub_key=public_key,
                      pri_keys=pickle.dumps(private_key_set))
     return entry, public_key, private_key
 
 def prepare_put_entry(term, dict_id, issuer, keyval, dict_pub_key):
-    encrypted_op = get_encrypted_message(pickle.dumps(dict_pub_key, LogConsts.PUT))
-    encrypted_keyval = get_encrypted_message(pickle.dumps(dict_pub_key, keyval))
-    entry = LogEntry(term=term, op_t=encrypted_op, dict_id=dict_id, issuer=issuer, keyval=encrypted_keyval)
+    encrypted_keyval = get_encrypted_message(dict_pub_key, pickle.dumps(keyval))
+    entry = LogEntry(term=term, op_t=LogConsts.PUT, dict_id=dict_id, issuer=issuer, keyval=encrypted_keyval)
     return entry
 
 def prepare_get_entry(term, dict_id, issuer, key, dict_pub_key):
-    encrypted_op = get_encrypted_message(pickle.dumps(dict_pub_key, LogConsts.GET))
-    encrypted_key = get_encrypted_message(pickle.dumps(dict_pub_key, key))
-    entry = LogEntry(term=term, op_t=encrypted_op, dict_id=dict_id, issuer=issuer, key=encrypted_key)
+    encrypted_key = get_encrypted_message(dict_pub_key, pickle.dumps(key))
+    entry = LogEntry(term=term, op_t=LogConsts.GET, dict_id=dict_id, issuer=issuer, key=encrypted_key)
     return entry
