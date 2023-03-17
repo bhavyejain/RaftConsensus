@@ -301,6 +301,7 @@ class StateMachine:
     def reset_state_machine(self):
         self.last_committed = 0
         self.parent_dict.clear()
+        self.parent_dict["members"] = dict()
     
     def advance_state_machine(self):
         while True:
