@@ -105,5 +105,5 @@ class Log:
             for entry in entries:
                 self.log.append(entry)
 
-        self.write_logs_to_disk()
         self.commit_index = comm_idx
+        self.write_logs_to_disk()

@@ -11,6 +11,7 @@ import threading
 from tqdm import tqdm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
+from threading import Lock
 
 class ConsensusModule:
     def __init__(self, client_name, log, connections):
@@ -34,6 +35,7 @@ class ConsensusModule:
                 self.next_index[client] = 0
                 self.last_append[client] = 0
         self.replies_for_append = {}
+        self.sending_rpc = Lock()
         self.pbar = tqdm(total=(self.timeout), desc="Timeout:", colour='CYAN', bar_format='{l_bar}{bar}|')
         print()
 
@@ -76,15 +78,16 @@ class ConsensusModule:
             # print(f'Sending heartbeat <3 ...')
             # self.send_append_rpc()
             # time.sleep(config.DEF_DELAY * 2.5)
-            curr_time = round(time.time(), 2)
-            clients = []
-            for client, last in self.last_append.items():
-                if (curr_time - last) > (config.DEF_DELAY * 2):
-                    clients.append(client)
-            if len(clients) > 0:
-                print(f'Sending heartbeat <3 to {", ".join(clients)}...')
-                self.send_append_rpc(clients=clients)
-            time.sleep(0.25)
+            with self.sending_rpc:
+                curr_time = round(time.time(), 2)
+                clients = []
+                for client, last in self.last_append.items():
+                    if (curr_time - last) > (config.DEF_DELAY * 2):
+                        clients.append(client)
+                if len(clients) > 0:
+                    print(f'Sending heartbeat <3 to {", ".join(clients)}...')
+                    self.send_append_rpc(clients=clients)
+            time.sleep(0.5)
 
     def become_leader(self):
         print("I AM LEADER NOW!")
@@ -92,6 +95,7 @@ class ConsensusModule:
         heartbeat_thread = threading.Thread(target=self.heartbeat, args=())
         heartbeat_thread.start()
         _, lli = self.log.get_last_term_idx()
+        print(f'lli: {lli}')
         for client in config.CLIENT_PORTS.keys():
             if not client == self.id:
                 self.next_index[client] = lli + 1
@@ -101,7 +105,7 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def handle_vote_request(self, message):
-        print(f'Processing vote request from {message.c_id} for term {message.term}')
+        print(f'{message.c_id}: VoteRequest | term: {message.term}')
         vote_granted = False
         if message.term > self.term:
             self.term = message.term
@@ -128,7 +132,7 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def handle_vote_response(self, message):
-        print(f'Processing incoming vote for term {self.term}')
+        print(f'Vote | {message.ok} | term: {self.term}')
         if message.term > self.term:
             print("I AM FOLLOWER NOW")
             self.role = RaftConsts.FOLLOWER
@@ -146,25 +150,26 @@ class ConsensusModule:
     def send_append_rpc(self, clients=None):
         tmp_f = []
         for follower, next_idx in self.next_index.items():
-            if (len(clients) == 0) or (follower in clients):
+            if clients == None or (follower in clients):
                 entries = self.log.get_entries_from_index(next_idx)
                 if not (len(entries) == 0):
-                    if entries[-1].index in self.replies_for_append.keys():
+                    if not (entries[-1].index in self.replies_for_append.keys()):
                         self.replies_for_append[entries[-1].index] = set()
                 lli = next_idx - 1
                 llt = self.log.get_term_at_index(lli)
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
                 tmp = pickle.dumps(msg)
                 self.last_append[follower] = round(time.time(), 2)
+                print(f'Sending AppendRPC to {follower} | {len(entries)} entries | prev_index: {lli} | prev_term: {llt}')
                 send_message(self.connections, follower, tmp)
                 tmp_f.append(follower)
         
         if len(tmp_f) > 0:
-            print(f'Sending AppendRPC to {", ".join(tmp_f)} with {len(entries)} entries')
+            # print(f'Sending AppendRPC to {", ".join(tmp_f)} | {len(entries)} entries | prev_index: {lli} | prev_term: {llt}')
             self.write_state_to_disk()
 
     def handle_append_rpc(self, message):
-        print(f'Processing incoming AppendRPC for term {message.term} from leader {message.l_id} with {len(message.entries)} entries')
+        print(f'{message.l_id}: AppendRPC | term: {message.term} | entries: {len(message.entries)}')
         if message.term < self.term:
             return
         if message.term > self.term:
@@ -177,6 +182,7 @@ class ConsensusModule:
         self.reset_pbar()
 
         term_t = self.log.get_term_at_index(message.lli)
+        print(f'Prev term: {term_t}')
         if not term_t == message.llt:
             response = Message(m_type=RaftConsts.RESULT, term=self.term, ok=False, sender=self.id)
             tmp = pickle.dumps(response)
@@ -199,15 +205,14 @@ class ConsensusModule:
         self.write_state_to_disk()
 
     def handle_append_response(self, message):
-        print(f'Processing incoming append response from {message.sender}')
         if self.role == RaftConsts.LEADER and message.term <= self.term:
             if message.ok == False:
-                print("Received NACK")
+                print(f'{message.sender}: NACK | index: {message.lli}')
                 self.next_index[message.sender] = self.next_index[message.sender] - 1
                 self.send_append_rpc(clients=[message.sender])
             else:
                 if not message.lli == 0:
-                    print(f'Adding response for index {message.lli}')
+                    print(f'{message.sender}: ACK | index: {message.lli}')
                     self.replies_for_append[message.lli].add(message.sender)
                     # commit log(s)
                     if len(self.replies_for_append[message.lli]) >= self.quorum and message.lli > self.commit_index:

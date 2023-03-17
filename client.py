@@ -50,9 +50,10 @@ def handle_client(client, client_id):
 
 def add_to_log(entry):
     global local_log, consensus_module
-    local_log.append_log(entry)
-    consensus_module.update_next_index()
-    consensus_module.send_append_rpc()
+    with consensus_module.sending_rpc:
+        local_log.append_log(entry)
+        # consensus_module.update_next_index()
+        consensus_module.send_append_rpc()
 
 def handle_cli(client, client_id):
     global local_log, parent_dict, consensus_module
@@ -65,6 +66,7 @@ def handle_cli(client, client_id):
                 if message.startswith("CREATE"):
                     member_clients = message.split()[1:]
                     entry = utils.prepare_create_entry(consensus_module.term, client_name, counter, member_clients)
+                    counter = counter + 1
                     add_to_log(entry)
                 elif message.startswith("PUT"):
                     comp = message.split()
@@ -72,7 +74,7 @@ def handle_cli(client, client_id):
                     add_to_log(entry)
                 elif message.startswith("GET"):
                     comp = message.split()
-                    entry = utils.prepare_put_entry(consensus_module.term, comp[1], client_name, comp[2])
+                    entry = utils.prepare_get_entry(consensus_module.term, comp[1], client_name, comp[2])
                     add_to_log(entry)
                 elif message.startswith("PRINTDICT"):
                     comp = message.split()
