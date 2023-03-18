@@ -159,7 +159,9 @@ class ConsensusModule:
                 entries = self.log.get_entries_from_index(next_idx)
                 if not (len(entries) == 0):
                     if not (entries[-1].index in self.replies_for_append.keys()):
-                        self.replies_for_append[entries[-1].index] = set(self.id)
+                        self.replies_for_append[entries[-1].index] = set()
+                        self.replies_for_append[entries[-1].index].add(self.id)
+                        print(f'Setting replies for {entries[-1].index} as {self.replies_for_append[entries[-1].index]}')
                 lli = next_idx - 1
                 llt = self.log.get_term_at_index(lli)
                 msg = Message(m_type=RaftConsts.APPEND, term=self.term, l_id=self.id, lli=lli, llt=llt, entries=entries, comm_idx=self.commit_index)
@@ -221,6 +223,7 @@ class ConsensusModule:
                 if not message.lli == 0:
                     print(f'{c.VIOLET}{message.sender}{c.ENDC}: {c.GREEN}ACK{c.ENDC} | index: {message.lli} | term: {message.term}')
                     self.replies_for_append[message.lli].add(message.sender)
+                    print(f'Replies for {message.lli}: {self.replies_for_append[message.lli]}')
                     # commit log(s)
                     if len(self.replies_for_append[message.lli]) >= self.quorum and message.lli > self.commit_index:
                         print(f'{c.GREEN}Committing log index {message.lli}{c.ENDC}')

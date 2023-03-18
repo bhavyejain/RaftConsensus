@@ -124,7 +124,8 @@ def handle_cli(client, client_id):
                     # NODE_FAIL_HANDLING: add failure logic
                     print(f'{c.ERROR}Link with {conn_name} broken!{c.ENDC}')
                     failed_links.append(conn_name)
-                    connections.pop(conn_name)
+                    if conn_name in connections.keys():
+                        connections.pop(conn_name)
                 elif message.startswith("FIXLINK"):
                     comp = message.split()
                     conn_name = comp[1] # basically the other client name
