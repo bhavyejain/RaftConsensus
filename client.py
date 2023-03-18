@@ -144,7 +144,8 @@ def handle_cli(client, client_id):
                     print(f'{c.SUCCESS}I AM ALIVE!{c.ENDC}')
                     # NODE_FAIL_HANDLING
                     consensus_module.restore_node()
-                    connections = static_connections.copy()
+                    for key, val in static_connections.items():
+                        connections[key] = val
                     is_failed = False
                 elif message == "PRINTALL":
                     tmp = f'================================\n'
